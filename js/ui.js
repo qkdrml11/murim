@@ -9,7 +9,7 @@ const S = () => G.S;
 const bandBadge = w => { const [t, c] = DuelLib.band(w); return '<span class="badge b-' + c + '">' + t + (G.debug ? ' ' + Math.round(w * 100) + '%' : '') + '</span>'; };
 
 // ---------- 공통: 토스트·모달 ----------
-function flushToasts() { while (G.msgs.length) { const d = document.createElement('div'); d.textContent = G.msgs.shift(); $('#toast').appendChild(d); setTimeout(() => d.remove(), 3300); } }
+function flushToasts() { while (G.msgs.length) { const d = document.createElement('div'); d.textContent = G.msgs.shift(); const tb = $('#toast'); tb.appendChild(d); while (tb.children.length > 4) tb.firstChild.remove(); setTimeout(() => d.remove(), 3300); } }
 function modal(o) { // {title, text, html, buttons:[{t, cls, fn, keep}]}
   return new Promise(res => {
     const m = $('#modal'); m.classList.remove('hidden');
