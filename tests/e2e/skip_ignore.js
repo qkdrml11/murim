@@ -8,7 +8,7 @@ const [W, H] = (process.argv[2] || '360x800').split('x').map(Number);
     const st = await p.evaluate(() => ({ ov: !document.querySelector('#overlay').classList.contains('hidden'), mo: !document.querySelector('#modal').classList.contains('hidden'), t: G.S ? G.S.turn : 0 }));
     if (st.t >= (+process.env.TURN || 9)) break; if (i % 300 === 0) console.log(i, JSON.stringify(st), await p.evaluate(() => (document.querySelector('#modal:not(.hidden) h3')||{}).textContent));
     if (st.ov) { const x = await p.$('#overlay .pt.on') || await p.$('#orb') || await p.$('#parry'); if (x) await x.click().catch(() => {}); continue; }
-    if (st.mo) { const bt = await p.$$('#modal .btns button:not([disabled])'); if (bt.length) { let k = 0; for (let j = 0; j < bt.length; j++) if (/나중|다음에/.test(await bt[j].textContent())) k = j; await bt[k].click().catch(() => {}); } continue; } // 안내 무시: 마지막(나중에) 버튼
+    if (st.mo) { const bt = await p.$$('#modal .btns button:not([disabled])'); if (bt.length) { let k = 0; for (let j = 0; j < bt.length; j++) if (/나중|다음에/.test(await bt[j].textContent())) k = j; await bt[k].click().catch(() => {}); await p.waitForTimeout(260); } continue; } // 안내 무시: 마지막(나중에) 버튼
     await p.click('#aEnd', { timeout: 2000 }).catch(() => {}); }
   const m = await p.evaluate(() => ({ t: G.S.turn, tut: (G.tutCurrent() || {}).id, todo: G.S.todo, top: document.querySelector('#top').textContent.slice(0, 140),
     hitMin: Math.min(...[...document.querySelectorAll('.node circle[fill="transparent"]')].map(c => c.getBoundingClientRect().width)).toFixed(1),

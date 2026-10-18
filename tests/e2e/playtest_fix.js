@@ -8,7 +8,7 @@ const [W, H] = (process.argv[2] || '390x844').split('x').map(Number);
   async function adv(n = 1500) { for (let i = 0; i < n; i++) { await p.waitForTimeout(40);
     if (await vis('#overlay')) { if (await p.$('#overlay .pt.on')) { await p.click('#overlay .pt.on'); continue; } if (await p.$('#orb')) { await p.click('#orb'); continue; }
       const t = await p.$eval('#parry', e => e.textContent).catch(() => null); if (t && /승리|패배/.test(t)) { await p.click('#parry'); continue; } if (await p.$('#parry.live')) { await p.click('#parry'); continue; } continue; }
-    if (await vis('#modal')) { const bt = await p.$$('#modal .btns button:not([disabled])'); if (bt.length) { await bt[0].click(); continue; } } return; } }
+    if (await vis('#modal')) { const bt = await p.$$('#modal .btns button:not([disabled])'); if (bt.length) { await bt[0].click(); await p.waitForTimeout(280); continue; } } await p.waitForTimeout(280); return; } }
   const claim = async () => { if (await p.$('#claim:not([disabled])')) { await p.click('#claim'); await adv(); } };
   const measure = async (tag) => { const m = await p.evaluate(() => {
       const app = document.querySelector('#app').getBoundingClientRect();
@@ -20,13 +20,13 @@ const [W, H] = (process.argv[2] || '390x844').split('x').map(Number);
       return { hitMin: Math.min(...hits).toFixed(1), labelMin: Math.min(...lab).toFixed(1), small, bubble: ov, scrollW: document.documentElement.scrollWidth };
     }); console.log(tag, JSON.stringify(m)); await p.screenshot({ path: `/tmp/pw/fix_${W}_${tag}.png` }); };
   await p.click('#new'); await adv(); await measure('t1');
-  await p.click('#aFight'); await p.click('#modal .btns button >> nth=0'); await adv(); await claim();
+  await p.click('#aFight'); await p.click('#modal .btns button >> nth=0'); await p.waitForTimeout(280); await adv(); await claim();
   await p.click('#aTrain'); await adv(); if (await p.$('#aBreak')) { await p.click('#aBreak'); await adv(); } await claim();
-  await p.click('#aFight'); await p.click('#modal .btns button >> nth=1'); await adv(); await claim();
+  await p.click('#aFight'); await p.click('#modal .btns button >> nth=1'); await p.waitForTimeout(280); await adv(); await claim();
   await p.click('#aEnd'); await adv();
   await p.click('#aExplore'); await adv(); await measure('t2');
   await p.click('#tabs button[data-tab=base]'); await p.click('[data-q="0"]'); await measure('base'); await p.click('#tabs button[data-tab=map]');
-  await p.click('#aFight'); await p.click('#modal .btns button >> nth=0'); await adv(); await claim();
+  await p.click('#aFight'); await p.click('#modal .btns button >> nth=0'); await p.waitForTimeout(280); await adv(); await claim();
   await p.click('#aTrain'); await adv(); await claim();
   console.log('T at turn2 end:', await p.evaluate(() => (G.tutCurrent() || {}).id));
   // 나쁜 경로: 경맥 화면을 보지 않고 턴 종료 → 3턴 팝업 기본 버튼

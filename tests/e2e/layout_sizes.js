@@ -4,7 +4,7 @@ const { chromium } = require('playwright');
   const ctx = await b.newContext({ viewport: { width: W, height: H }, isMobile: true, hasTouch: true }); const p = await ctx.newPage();
   p.on('console', m => { if (m.type() === 'error') errs.push(W + 'x' + H + ' ' + m.text()); }); p.on('pageerror', e => errs.push('PE ' + e.message));
   await p.goto('http://localhost:8766/?debug=1&seed=1'); await p.click('#skip');
-  for (let i = 0; i < 20 && await p.evaluate(() => !document.querySelector('#modal').classList.contains('hidden')); i++) await p.click('#modal .btns button >> nth=0');
+  for (let i = 0; i < 20 && await p.evaluate(() => !document.querySelector('#modal').classList.contains('hidden')); i++) await p.click('#modal .btns button >> nth=0'); await p.waitForTimeout(280);
   const states = { '1줄': S => { S.todo = false; }, '3줄+할일': S => { S.turn = 9; S.todo = true; }, '4줄+경고+토스트': S => { S.turn = 9; S.todo = true; S.xp = 99999; S.realm = 2; S.mer = 12; S.loc = 'guangxi'; } };
   for (const [nm, f] of Object.entries(states)) {
    await p.evaluate(src => { eval('(' + src + ')')(G.S); UI.refresh(); if (G.canBreak()) { G.toast('돌파할 수 있다!'); } UI.refresh(); }, f.toString());
@@ -27,7 +27,7 @@ const { chromium } = require('playwright');
   for (let i = 0; i < 400; i++) { await p.waitForTimeout(50); maxToasts = Math.max(maxToasts, await p.evaluate(() => document.querySelectorAll('#toast div').length));
     const h = await p.evaluate(() => { const m = document.querySelector('#modal'); return m.classList.contains('hidden') ? null : (m.querySelector('h2') || {}).textContent; });
     if (h) { if (titles[titles.length - 1] !== h) titles.push(h); if (/^알림/.test(h)) sums++;
-      const bs = await p.$$('#modal .btns button:not([disabled])'); let k = 0; for (let j = 0; j < bs.length; j++) if (/배우며|홀로|③|낭인/.test(await bs[j].textContent())) k = j; if (bs.length) await bs[k].click().catch(() => {}); }
+      const bs = await p.$$('#modal .btns button:not([disabled])'); let k = 0; for (let j = 0; j < bs.length; j++) if (/배우며|홀로|③|낭인/.test(await bs[j].textContent())) k = j; if (bs.length) { await bs[k].click().catch(() => {}); await p.waitForTimeout(260); } }
     else if (await p.evaluate(() => G.S.turn >= 25 && G.S.route === 3) && i > 60) break; }
   console.log(W + 'x' + H, 'branch', JSON.stringify({ turn: await p.evaluate(() => G.S.turn), route: await p.evaluate(() => G.S.route), maxToasts, titles }));
   await p.screenshot({ path: `/tmp/pw/n_${W}x${H}_branch.png` });

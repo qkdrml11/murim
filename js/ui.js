@@ -3,20 +3,21 @@
 (function () {
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const UI = { tab: 'map', sub: { char: 'me', base: 'inn' }, sel: null, flash: [], busy: false, replay: null, lastDuelLog: [], instant: false, autoParry: false };
+const UI = { zoom: { k: 1, tx: 0, ty: 0 }, tapLog: [], tab: 'map', sub: { char: 'me', base: 'inn' }, sel: null, flash: [], busy: false, replay: null, lastDuelLog: [], instant: false, autoParry: false };
 window.UI = UI;
 const S = () => G.S;
 const bandBadge = w => { const [t, c] = DuelLib.band(w); return '<span class="badge b-' + c + '">' + t + (G.debug ? ' ' + Math.round(w * 100) + '%' : '') + '</span>'; };
 
 // ---------- 공통: 토스트·모달 ----------
 // 토스트는 한 번에 2개까지. 3개 이상 몰리면 요약 모달 1개로 묶는다(버튼 위로 쌓이지 않게)
-let toastTimer = null;
-function flushToasts() { if (!G.msgs.length) return; clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { const tb = $('#toast'); const vis = [...tb.children].map(d => d.textContent);
-    const all = vis.concat(G.msgs.splice(0)); if (!all.length) return;
-    const nLines = all.reduce((n, t) => n + String(t).split('\n').length, 0);
-    if (all.length >= 3 || nLines >= 3) {       tb.innerHTML = ''; modal({ title: '알림 ' + all.length + '건', html: '<ul class="sumlist">' + all.map(t => '<li>' + esc(t).replace(/\n/g, '<br>') + '</li>').join('') + '</ul>' }); return; }
-    tb.innerHTML = ''; for (const t of all) { const d = document.createElement('div'); d.textContent = t; tb.appendChild(d); setTimeout(() => d.remove(), 3500); } }, 60); }
+// 토스트는 한 번에 2개까지. 4건 이상 몰리면 요약 모달 1개로 묶어 바로 띄운다(단일 모달 큐)
+function flushToasts() { if (!G.msgs.length) return; const tb = $('#toast'); const vis = [...tb.children].map(d => d.textContent);
+  const all = vis.concat(G.msgs.splice(0));
+  if (all.length >= 4) { tb.innerHTML = ''; modal({ title: '알림 ' + all.length + '건', html: '<ul class="sumlist">' + all.map(t => '<li>' + esc(t).replace(/\n/g, '<br>') + '</li>').join('') + '</ul>' }); return; }
+  tb.innerHTML = ''; for (const t of all.slice(-2)) { const d = document.createElement('div'); d.textContent = t; tb.appendChild(d); setTimeout(() => d.remove(), 3500); } }
+// 모달이 닫힌 뒤 250ms 동안 입력 무시(두 번 탭이 탭 바·행동 버튼에 닿지 않게, 큐 사이 1틱 틈도 막음)
+UI.blockUntil = 0;
+['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'click'].forEach(ev => document.addEventListener(ev, e => { if (performance.now() < UI.blockUntil) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); } }, { capture: true, passive: false }));
 // 모든 모달은 하나의 줄(queue)로: 한 번에 하나만, 앞의 것이 닫혀야 다음 것이 열린다
 let modalQ = Promise.resolve(); UI.modalLog = []; UI.modalPending = 0;
 function modal(o) { UI.modalPending++;
@@ -29,7 +30,7 @@ function showModal(o) { // {title, text, html, buttons:[{t, cls, fn, keep}]}
     m.innerHTML = '<div class="sheet"><h2>' + esc(o.title || '') + '</h2>' + (o.text ? '<div class="txt">' + esc(o.text) + '</div>' : '') + (o.html || '') + '<div class="btns"></div></div>';
     const box = m.querySelector('.btns');
     (o.buttons || [{ t: '확인', cls: 'pri' }]).forEach((b, i) => { const el = document.createElement('button'); el.className = 'big ' + (b.cls || ''); el.textContent = b.t; el.disabled = !!b.disabled;
-      el.onclick = () => { m.classList.add('hidden'); m.innerHTML = ''; if (b.fn) b.fn(); res(i); }; box.appendChild(el); });
+      el.onclick = () => { UI.blockUntil = performance.now() + 250; m.classList.add('hidden'); m.innerHTML = ''; if (b.fn) b.fn(); res(i); }; box.appendChild(el); });
     if (o.after) o.after(m);
   });
 }
@@ -90,6 +91,7 @@ async function enterGame(isNew) {
 // ---------- 상단 바 ----------
 const progTxt = i => { const p = G.goalProg(i); return p ? ' (' + Math.min(p[0], p[1]) + '/' + p[1] + ')' : ''; };
 const todoHint = () => { const w = G.whereTo(); return w.ids.length && w.why ? ' → ' + (w.why.indexOf('길') >= 0 || w.why.indexOf('미방문') >= 0 || w.why.indexOf('객잔') >= 0 ? w.why : w.ids.map(G.rname).join('·')) : ''; };
+const subLine = g => '<div class="goal sub" id="subg"><span class="gt">◦ ' + esc(g.t) + ' <span class="muted">· ' + esc(g.rw) + '</span></span></div>';
 function topHTML() {
   const s = S(); let h = '';
   const P = s.tut.path;
@@ -98,10 +100,14 @@ function topHTML() {
   } else if (s.route === 3) h += '<div class="goal"><span class="gt">🧭 홀로 걷는 길: 현상금·호위로 이름을 떨쳐라 (25~30턴)</span></div>';
   else {
     const lines = G.goalLines(), cl = G.claimable();
+    const subg = G.subText(); const rest = lines.length - 1;
     lines.forEach((i, k) => { const ok = G.goalCond(i); const sub = k > 0 && !D.GOALS[i][2];
+      if (k === 1) { if (subg) h += subLine(subg); if (rest > 0) h += '<div class="goal sub" id="nextTog"><span class="gt">· 다음 목표 ' + rest + '개 ' + (UI.nextOpen ? '▴' : '▾') + '</span></div>'; }
+      if (k > 0 && !UI.nextOpen) return;
       h += '<div class="goal ' + (sub ? 'sub ' : '') + (ok ? 'ok' : '') + '"><span class="gt">' + (k === 0 ? '🎯 ' : '· ') + esc(D.GOALS[i][0]) + '<b style="color:#fbbf24">' + progTxt(i) + '</b><span class="muted">' + esc(G.giveText(D.GOALS[i][1])) + '</span></span>' +
         (k === 0 ? '<button class="sm ' + (cl.length ? 'pri glow' : '') + '" id="claim" ' + (cl.length ? '' : 'disabled') + '>받기' + (cl.length > 1 ? ' ' + cl.length : '') + '</button><button class="sm icon' + (s.todo ? ' glow' : '') + '" id="where" title="어디로?">➜</button>' : '') + '</div>'; });
     if (!lines.length) h += '<div class="goal"><span class="gt">🎯 1막 목표를 모두 마쳤다</span></div>';
+    if (lines.length <= 1 && subg) h += subLine(subg);
   }
   if (s.todo && !s.route) h += '<div class="goal sub" style="color:#fbbf24;font-weight:700" id="todo"><span class="gt">👉 지금 할 일: ' + esc((s.goals.mainIdx >= 0 && D.GOALS[s.goals.mainIdx] ? D.GOALS[s.goals.mainIdx][0] + progTxt(s.goals.mainIdx) : G.nowTodo()) + todoHint()) + '</span></div>';
   const lk = G.breakLock();
@@ -116,7 +122,7 @@ const TER = { '마을': '#c08a52', '도시': '#7c8aa0', '산': '#4d7c0f', '강':
 function mapSVG() {
   const s = S(); if (s.todo && !UI.flash.length) UI.flash = G.whereTo().ids;
   const mt = G.moveTargets(), reveal = !!s.ev.branched && s.ev.branched !== false;
-  let h = '<svg class="map" viewBox="0 0 390 560" preserveAspectRatio="xMidYMid meet">';
+  const z = UI.zoom; let h = '<svg class="map" viewBox="0 0 390 560" preserveAspectRatio="xMidYMid meet"><rect class="mapbg" x="-2000" y="-2000" width="4390" height="4560" fill="transparent"/><g id="mz" transform="translate(' + z.tx + ' ' + z.ty + ') scale(' + z.k + ')">';
   const done = {};
   for (const a in D.ADJ) for (const b of D.ADJ[a]) { const k = [a, b].sort().join(); if (done[k]) continue; done[k] = 1; const [x1, y1] = XY(a), [x2, y2] = XY(b);
     const hl = (a === s.loc && mt[b]) || (b === s.loc && mt[a]); h += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="' + (hl ? '#fbbf24' : '#57534e') + '" stroke-width="' + (hl ? 2.5 : 1.2) + '"/>'; }
@@ -136,7 +142,7 @@ function mapSVG() {
     if (id === s.loc) h += '<text x="' + (x - 7) + '" y="' + (y - 14) + '" font-size="16">🗡️</text>';
     h += '<circle cx="' + x + '" cy="' + y + '" r="33" fill="transparent"/></g>';
   }
-  return h + '</svg>';
+  return h + '</g></svg>';
 }
 function regionCard(id) {
   const s = S(), cl = G.closed(id), here = id === s.loc;
@@ -156,7 +162,7 @@ function regionCard(id) {
 }
 function mapTab() {
   const s = S(), sel = UI.sel || s.loc;
-  let h = '<div class="mapwrap">' + mapSVG() + '</div>';
+  let h = '<div class="mapwrap">' + mapSVG() + '<div class="zctl"><button id="zOut" aria-label="축소">－</button><span id="zLbl">' + String(+UI.zoom.k.toFixed(2)) + '×</span><button id="zIn" aria-label="확대">＋</button></div></div>';
   if (UI.sel && UI.sel !== s.loc) { const mt = G.moveTargets(), id = UI.sel;
     h += '<div class="selbar"><b>' + G.rname(id) + ' · 위험도 ' + G.risk(id) + (G.closed(id) ? ' 🔒' : '') + '</b><button class="sm ' + (mt[id] ? 'pri' : '') + '" id="goBtn" ' + (mt[id] && (s.acts > 0 || s.off.steps > 0) ? '' : 'disabled') + '>' + (mt[id] ? '이동 (' + mt[id] + '칸)' : '인접 아님') + '</button><button class="sm" id="selX">✕</button></div>'; }
   else h += '<div class="rumor">📜 ' + esc(s.rumor) + '</div>';
@@ -260,20 +266,20 @@ function bind() {
   on('claim', () => { G.claim(); checkWanted(); refresh(); drain(); });
   on('where', whereTo);
   on('rest', restSheet); on('help', helpCards); on('set', settings);
-  document.querySelectorAll('.node').forEach(n => n.onclick = () => { UI.sel = n.dataset.id; if (UI.sel === s.loc) UI.sel = null; refresh(); });
+  mapGestures(); on('zIn', () => zoomBy(0.25)); on('zOut', () => zoomBy(-0.25)); on('nextTog', () => { UI.nextOpen = !UI.nextOpen; refresh(); });
   on('goBtn', () => doMove(UI.sel)); on('selX', () => { UI.sel = null; refresh(); });
-  document.querySelectorAll('[data-nb]').forEach(b => b.onclick = () => { UI.sel = b.dataset.nb; refresh(); document.getElementById('content').scrollTop = 0; });
+  document.querySelectorAll('[data-nb]').forEach(b => b.onclick = () => { UI.sel = b.dataset.nb; G.tutUse('T8'); refresh(); document.getElementById('content').scrollTop = 0; });
   on('aTrain', () => { G.train(); afterAct(); });
-  on('aFight', fightSheet);
+  on('aFight', () => { G.tutUse('T1'); fightSheet(); });
   on('aExplore', () => { G.explore(); afterAct(); });
   on('aMove', () => { G.toast('지도에서 빛나는 이웃 지역을 눌러 이동하세요'); flushToasts(); });
   on('aTat', tatongUI);
   on('aEnd', async () => { if (s.acts > 0 && !(await confirmP('행동이 ' + s.acts + '개 남았다. 턴을 끝낼까?'))) return; G.endTurn(); UI.sel = null; UI.flash = []; afterAct(); });
   on('aBreak', breakUI);
-  on('aLock', () => { if (s.tut.personal) s.tut.personal.seen.meridian = true; UI.tab = 'char'; UI.sub.char = 'mer'; refresh(); });
+  on('aLock', () => { G.tutUse('T6'); if (s.tut.personal) s.tut.personal.seen.meridian = true; UI.tab = 'char'; UI.sub.char = 'mer'; refresh(); });
   on('myPath', () => routeCards(true));
   on('useGeum', () => { G.useItem('금창약'); refresh(); }); on('useGeum2', () => { G.useItem('금창약'); refresh(); }); on('useSoh', () => { G.useItem('소환단'); refresh(); });
-  document.querySelectorAll('.tabs2 button').forEach(b => b.onclick = () => { UI.sub[UI.tab] = b.dataset.sub; if (UI.tab === 'char') { s.tut.personal.seen[b.dataset.sub === 'mer' ? 'meridian' : b.dataset.sub === 'wanted' ? 'wanted' : 'x'] = true; G.save(); } refresh(); });
+  document.querySelectorAll('.tabs2 button').forEach(b => b.onclick = () => { UI.sub[UI.tab] = b.dataset.sub; if (UI.tab === 'base' && b.dataset.sub === 'inn') G.tutUse('T5'); if (UI.tab === 'char' && b.dataset.sub === 'mer') G.tutUse('T6'); if (UI.tab === 'char' && b.dataset.sub === 'wanted') G.tutUse('T9'); if (UI.tab === 'char') { s.tut.personal.seen[b.dataset.sub === 'mer' ? 'meridian' : b.dataset.sub === 'wanted' ? 'wanted' : 'x'] = true; G.save(); } refresh(); });
   document.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { const e = G.acceptQuest(+b.dataset.q); if (e) G.toast(e); refresh(); });
   document.querySelectorAll('[data-b]').forEach(b => b.onclick = () => { const e = G.acceptBounty(+b.dataset.b); if (e) G.toast(e); refresh(); });
   on('escAcc', () => { const e = G.acceptEscort(); if (e) G.toast(e); refresh(); });
@@ -286,7 +292,7 @@ function checkWanted() { // 수배첩 단계 보상(자동)
   [[5, 20, 100], [10, 40, 150], [15, 60, 200]].forEach(([k, f, sv]) => { if (n >= k && !s.wantedRw[k]) { s.wantedRw[k] = 1; s.fame += f; s.silver += sv; if (k === 10) G.addTitle('흑도사냥꾼'); G.push({ type: 'info', title: '수배첩 ' + k + '명', text: '명성 +' + f + ', 은자 +' + sv }); } });
   G.save();
 }
-document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { UI.tab = b.dataset.tab; refresh(); });
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { UI.tab = b.dataset.tab; if (G.S) { if (UI.tab === 'base' && UI.sub.base === 'inn') G.tutUse('T5'); if (UI.tab === 'char' && UI.sub.char === 'mer') G.tutUse('T6'); if (UI.tab === 'char' && UI.sub.char === 'wanted') G.tutUse('T9'); } refresh(); });
 // ---------- 이동 ----------
 async function doMove(id) {
   const s = S(); if (!id) return; const r = G.risk(id);
@@ -307,7 +313,7 @@ async function fightSheet() {
     if (!(await confirmP('정말 싸우겠습니까? 지면 이번 턴 싸울 수 없습니다.', '그래도 싸운다', '물러난다'))) return; }
   G.useAct(1);
   const tut = !s.tut.personal.skipped && t.kind === 'boss' && t.id === 'guizhou' && !s.bossesKilled.guizhou;
-  const win = await duelUI(t.e, G.duelOpts(t.kind, t.id), { w, window: tut ? 2.0 : 1.2, tutorial: tut });
+  const win = await duelUI(t.e, G.duelOpts(t.kind, t.id), { w, window: tut ? 2.0 : 1.2, tutorial: tut, boss: t.kind === 'boss' });
   G.fightResult(t, win, w); afterAct();
 }
 // 일기토 화면. resolve(win)
@@ -339,20 +345,21 @@ function duelUI(e, opts, cfg) {
       UI.lastDuelLog = d.log.slice(); s.lastDuel = { nm, win: r.win, t: r.t, gise: d.gise, ok: d.okp, log: d.log.slice(-40) };
       P.disabled = false; P.classList.remove('live'); P.textContent = r.win ? '승리! (' + r.t.toFixed(1) + '초 · 기세 ' + d.gise + '회 · 파훼 ' + d.okp + ')' : '패배… (' + r.t.toFixed(1) + '초)';
       P.style.fontSize = '18px'; P.onclick = () => { ov.classList.add('hidden'); ov.innerHTML = ''; resolve(r.win); }; };
+    const t3 = () => { if (cfg.boss) G.tutUse('T3'); };
     const onGise = () => {
-      if (UI.instant || UI.autoParry) { const ok = G.rand() < Math.min(0.95, G.parryRate() + (d.fails2 >= 2 ? 0.15 : 0)); d.parry(ok); return; }
+      if (UI.instant || UI.autoParry) { const ok = G.rand() < Math.min(0.95, G.parryRate() + (d.fails2 >= 2 ? 0.15 : 0)); d.parry(ok); t3(); return; }
       clearInterval(timer); timer = null; P.disabled = false; P.classList.add('live'); const wms = d.window() * 1000;
       P.textContent = '파훼! (' + d.window().toFixed(1) + '초)';
       const t0 = performance.now(); draw();
       P.onclick = () => { if (!d.waiting) return; clearTimeout(waitTimer); resolveP(true); };
       waitTimer = setTimeout(() => resolveP(false), wms);
-      function resolveP(ok) { if (!d.waiting) return; s.parryHist.push(ok ? 1 : 0); if (s.parryHist.length > 20) s.parryHist.shift(); d.parry(ok); P.classList.remove('live'); P.disabled = true; P.textContent = ok ? '파훼 성공!' : '파훼 실패…'; P.onclick = null; draw(); if (d.done) return finish(); run(); }
+      function resolveP(ok) { if (!d.waiting) return; s.parryHist.push(ok ? 1 : 0); if (s.parryHist.length > 20) s.parryHist.shift(); d.parry(ok); t3(); P.classList.remove('live'); P.disabled = true; P.textContent = ok ? '파훼 성공!' : '파훼 실패…'; P.onclick = null; draw(); if (d.done) return finish(); run(); }
     };
     const stepOnce = () => { d.stepA(); if (d.done) return 'done'; if (d.waiting) return 'gise'; return null; };
     const run = () => {
       if (UI.instant) { let g = 0; while (!d.done && g++ < 5000) { const r = stepOnce(); if (r === 'gise') onGise(); } return finish(); }
       const per = Math.max(1, Math.round(s.speed || 1));
-      timer = setInterval(() => { for (let i = 0; i < per; i++) { const r = stepOnce(); if (r === 'done') return finish(); if (r === 'gise') { if (UI.autoParry) { onGise(); if (d.done) return finish(); continue; } draw(); return onGise(); } } draw(); }, 100);
+      timer = setInterval(() => { if (UI.paused) return; for (let i = 0; i < per; i++) { const r = stepOnce(); if (r === 'done') return finish(); if (r === 'gise') { if (UI.autoParry) { onGise(); if (d.done) return finish(); continue; } draw(); return onGise(); } } draw(); }, 100);
     };
     draw(); setTimeout(run, UI.instant ? 0 : 600);
   });
@@ -479,6 +486,7 @@ async function outUI(r) {
   if (r.firstOut && !s.tut.personal.skipped) G.toast('튜토리얼 T10: ' + D.TUT[9].t);
   let again = false;
   await modal({ title: '출관', html, buttons: [{ t: '강호로', cls: 'pri' }, { t: '다시 폐관', fn: () => again = true }] });
+  if (r.firstOut) G.t10Done(); // 2-24-2 T10 = 출관 화면 1번(닫을 때)
   if (again) { restSheet(); return; }
   s.todo = true; G.save(); // v0.5.2 ③ 재접속: '지금 할 일' 줄 + [어디로?] 자동 깜빡임
 }
@@ -511,7 +519,7 @@ async function routeCards(again) {
   G.claim(); refresh();
 }
 // ---------- 말풍선(튜토리얼) ----------
-function compactTop() { const t = $('#top'); const c = window.innerHeight < 720; let ph = $('#topPh');
+function compactTop() { const t = $('#top'); const c = vh() < 720; let ph = $('#topPh');
   if (!ph) { ph = document.createElement('div'); ph.id = 'topPh'; t.parentNode.insertBefore(ph, t); }
   t.classList.remove('open'); ph.style.height = '0px'; t.classList.toggle('compact', c);
   if (c && UI.goalOpen) { ph.style.height = t.offsetHeight + 'px'; t.classList.add('open'); }
@@ -522,23 +530,32 @@ function compactTop() { const t = $('#top'); const c = window.innerHeight < 720;
   if (!want && bd) bd.remove(); // 펼침은 지도 위에 겹쳐 띄우고 자리는 접힌 높이만큼만
   const g = t.querySelector('.goal .gt'); if (g && c) g.onclick = () => { UI.goalOpen = !UI.goalOpen; compactTop(); fitMap(); placeBubble(); }; }
 function fitMap() { compactTop(); const svg = document.querySelector('svg.map'), grid = document.querySelector('.acts-grid'); if (!svg || !grid) return;
-  const top = ($('#top').classList.contains('open') ? $('#topPh') : $('#top')).getBoundingClientRect().height, tabs = $('#tabs').getBoundingClientRect().height, sel = (document.querySelector('.selbar') || document.querySelector('.rumor') || { offsetHeight: 0 }).offsetHeight;
-  const ex = document.querySelector('.extra'); const exH = ex && ex.children.length ? ex.getBoundingClientRect().height + 6 : 0;
-  const avail = window.innerHeight - top - tabs - sel - grid.offsetHeight - exH - 14; svg.style.height = Math.max(150, Math.min(540, avail)) + 'px';
+  const top = ($('#top').classList.contains('open') ? $('#topPh') : $('#top')).offsetHeight, tabs = $('#tabs').offsetHeight, sel = (document.querySelector('.selbar') || document.querySelector('.rumor') || { offsetHeight: 0 }).offsetHeight;
+  const ex = document.querySelector('.extra'); const exH = ex && ex.children.length ? ex.offsetHeight + 6 : 0;
+  const avail = vh() - top - tabs - sel - grid.offsetHeight - exH - 14; svg.style.height = Math.max(150, Math.min(540, avail)) + 'px';
   // 터치 원은 지도 배율과 상관없이 화면 기준 지름 46px 이상
-  const sc = Math.min(svg.clientWidth / 390, svg.clientHeight / 560) || 1; const r = Math.max(33, 23 / sc);
-  svg.querySelectorAll('.node circle[fill="transparent"]').forEach(c => c.setAttribute('r', r.toFixed(1)));
-  // 지명은 화면 기준 13px 이상(외곽선 유지), 위험도 숫자는 12px 이상
-  const fs = Math.max(18, 13 / sc), rs = Math.max(17, 12 / sc);
-  svg.querySelectorAll('.node text').forEach(t => { if (/[가-힣]/.test(t.textContent)) { t.setAttribute('font-size', fs.toFixed(1)); t.setAttribute('y', (+t.closest('.node').querySelector('circle').getAttribute('cy') + 18 + fs).toFixed(1)); } else t.setAttribute('font-size', rs.toFixed(1)); });
+  fitNodes();
   // 토스트는 상단 바 바로 아래(지도 위)에 띄워 행동 버튼을 가리지 않게
-  const tb = $('#toast'); if (tb) { tb.style.bottom = 'auto'; tb.style.top = ($('#top').getBoundingClientRect().bottom - $('#app').getBoundingClientRect().top + 6) + 'px'; } }
-window.addEventListener('resize', () => { fitMap(); placeBubble(); });
+  { const nb = $('#narrow'); if (nb) nb.style.top = $('#top').offsetHeight + 'px'; }
+  const tb = $('#toast'); if (tb) { tb.style.bottom = 'auto'; tb.style.top = ($('#top').getBoundingClientRect().bottom - $('#app').getBoundingClientRect().top) / (UI.appScale || 1) + 6 + 'px'; } }
+// 2-24-3 화면 규격: 폭 < 360이면 #app을 폭÷360(최소 0.89)으로 축소, 가로면 덮개
+const vh = () => window.innerHeight / (UI.appScale || 1);
+function applyScreen() { const w = window.innerWidth, h = window.innerHeight, app = $('#app'); if (!app) return;
+  const land = w > h; $('#rot').classList.toggle('hidden', !land); UI.paused = land;
+  const s = w < 360 ? Math.max(320, w) / 360 : 1; UI.appScale = s;
+  document.body.classList.toggle('narrow', s < 1);
+  if (s < 1) { app.style.width = '360px'; app.style.maxWidth = '360px'; app.style.height = (h / s) + 'px'; app.style.transform = 'scale(' + s + ')'; app.style.transformOrigin = 'top left'; app.style.margin = '0'; }
+  else { app.style.width = app.style.maxWidth = app.style.height = app.style.transform = app.style.margin = ''; }
+  const nb = $('#narrow'); const ack = localStorage.getItem('murim_narrow_ack') === '1';
+  nb.classList.toggle('hidden', !(s < 1 && (w < 320 || !ack))); $('#narrowX').classList.toggle('hidden', w < 320); }
+UI.applyScreen = applyScreen;
+document.addEventListener('DOMContentLoaded', () => { const x = $('#narrowX'); if (x) x.onclick = () => { localStorage.setItem('murim_narrow_ack', '1'); applyScreen(); fitMap(); }; applyScreen(); });
+window.addEventListener('resize', () => { applyScreen(); fitMap(); placeBubble(); });
 function bubble() { fitMap(); bubble0(); placeBubble(); }
-function placeBubble() { const b = $('#bubble'); if (b.classList.contains('hidden')) return; const app = $('#app').getBoundingClientRect(), top = $('#top').getBoundingClientRect();
+function placeBubble() { const b = $('#bubble'); if (b.classList.contains('hidden')) return; const k = UI.appScale || 1; const R0 = e => { const r = e.getBoundingClientRect(); return { top: r.top / k, bottom: r.bottom / k }; }; const app = R0($('#app')), top = R0($('#top'));
   const tid = (b.querySelector('.who') || {}).textContent || ''; const grid = document.querySelector('.acts-grid');
   let y; if (/T8|R1/.test(tid) || !grid) y = top.bottom - app.top + 6; // 지도 노드가 대상이면 상단 바 바로 아래
-  else { const g = grid.getBoundingClientRect(); y = g.top - app.top - b.offsetHeight - 6; if (y < top.bottom - app.top + 4) y = top.bottom - app.top + 4; }
+  else { const g = R0(grid); y = g.top - app.top - b.offsetHeight - 6; if (y < top.bottom - app.top + 4) y = top.bottom - app.top + 4; }
   b.style.top = y + 'px'; }
 function bubble0() {
   const s = S(), b = $('#bubble');
@@ -566,7 +583,7 @@ function helpCards() {
 }
 function settings() {
   const s = S();
-  modal({ title: '설정', html: '<div class="row">속도 <button class="sm ' + (s.speed === 1 ? 'pri' : '') + '" data-sp="1">1×</button><button class="sm ' + (s.speed === 2 ? 'pri' : '') + '" data-sp="2">2×</button></div>',
+  modal({ title: '설정', after0: 1, html: '<div class="row">화면 <button class="sm" id="narrowOn" onclick="localStorage.removeItem(\'murim_narrow_ack\');UI.applyScreen()">좁은 화면 경고 다시 켜기</button></div>' + '<div class="row">속도 <button class="sm ' + (s.speed === 1 ? 'pri' : '') + '" data-sp="1">1×</button><button class="sm ' + (s.speed === 2 ? 'pri' : '') + '" data-sp="2">2×</button></div>',
     buttons: [{ t: '튜토리얼 다시 보기 · 개인 성장', fn: () => { UI.replay = { list: D.TUT, i: 0 }; UI.tab = 'map'; render(); } },
       { t: '튜토리얼 다시 보기 · 내 진로', disabled: !s.route, fn: () => { UI.replay = { list: D.RTUT, i: 0 }; UI.tab = 'map'; render(); } },
       { t: '새 게임(저장 삭제)', cls: 'red', fn: async () => { if (await confirmP('정말 저장을 지우고 처음부터?')) { localStorage.removeItem(G.SAVE_KEY); location.reload(); } } },
@@ -615,3 +632,45 @@ startScreen();
 })();
 
 
+
+// ---------- 지도 확대 (2-24-3): 핀치 0.75~2×, 드래그 이동, 빈 곳 더블탭 리셋, ＋－, 탭 판정 ----------
+const Z_MIN = 0.75, Z_MAX = 2;
+function zClamp() { const z = UI.zoom; z.k = Math.min(Z_MAX, Math.max(Z_MIN, Math.round(z.k * 1000) / 1000));
+  const m = 60; // 지도 그림이 최소 60단위는 화면 안에 남게
+  z.tx = Math.min(390 - m, Math.max(m - 390 * z.k, z.tx)); z.ty = Math.min(560 - m, Math.max(m - 560 * z.k, z.ty)); }
+function zApply() { zClamp(); const g = document.getElementById('mz'); if (!g) return; const z = UI.zoom;
+  g.setAttribute('transform', 'translate(' + z.tx.toFixed(1) + ' ' + z.ty.toFixed(1) + ') scale(' + z.k + ')');
+  const l = document.getElementById('zLbl'); if (l) l.textContent = String(+z.k.toFixed(2)) + '×'; fitNodes(); }
+function zoomAt(k, cx, cy) { const z = UI.zoom; const k0 = z.k; const k1 = Math.min(Z_MAX, Math.max(Z_MIN, k)); const c = [(cx - z.tx) / k0, (cy - z.ty) / k0]; z.k = k1; z.tx = cx - c[0] * k1; z.ty = cy - c[1] * k1; zApply(); }
+function zoomBy(d) { zoomAt(Math.round((UI.zoom.k + d) * 4) / 4, 195, 280); }
+UI.zoomBy = zoomBy;
+function zReset() { UI.zoom = { k: 1, tx: 0, ty: 0 }; zApply(); }
+function toVB(svg, x, y) { const p = svg.createSVGPoint(); p.x = x; p.y = y; const r = p.matrixTransform(svg.getScreenCTM().inverse()); return [r.x, r.y]; }
+function mapGestures() {
+  const svg = document.querySelector('svg.map'); if (!svg) return; const P = new Map(); let g = null; UI.lastPinchEnd = UI.lastPinchEnd || 0;
+  const pick = (x, y) => { const el = document.elementFromPoint(x, y); const n = el && el.closest && el.closest('.node'); return n ? n.dataset.id : null; };
+  svg.addEventListener('pointerdown', e => { svg.setPointerCapture && svg.setPointerCapture(e.pointerId); P.set(e.pointerId, [e.clientX, e.clientY]);
+    if (P.size === 1) g = { t0: performance.now(), x0: e.clientX, y0: e.clientY, moved: 0, pinch: false, drag: false, last: [e.clientX, e.clientY] };
+    if (P.size === 2 && g) { g.pinch = true; const [a, b] = [...P.values()]; g.d0 = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1; g.k0 = UI.zoom.k; g.tx0 = UI.zoom.tx; g.ty0 = UI.zoom.ty; g.m0 = toVB(svg, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2); } });
+  svg.addEventListener('pointermove', e => { if (!P.has(e.pointerId) || !g) return; P.set(e.pointerId, [e.clientX, e.clientY]);
+    if (g.pinch && P.size >= 2) { const [a, b] = [...P.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); const m = toVB(svg, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+      const k = Math.min(Z_MAX, Math.max(Z_MIN, g.k0 * d / g.d0)); const c = [(g.m0[0] - g.tx0) / g.k0, (g.m0[1] - g.ty0) / g.k0]; UI.zoom.k = k; UI.zoom.tx = m[0] - c[0] * k; UI.zoom.ty = m[1] - c[1] * k; zApply(); return; }
+    if (P.size === 1 && !g.pinch) { g.moved = Math.max(g.moved, Math.hypot(e.clientX - g.x0, e.clientY - g.y0)); if (g.moved >= 10) g.drag = true;
+      if (g.drag) { const a = toVB(svg, g.last[0], g.last[1]), b = toVB(svg, e.clientX, e.clientY); UI.zoom.tx += b[0] - a[0]; UI.zoom.ty += b[1] - a[1]; zApply(); } g.last = [e.clientX, e.clientY]; } });
+  const up = e => { if (!P.has(e.pointerId)) return; P.delete(e.pointerId); if (!g) return; const now = performance.now();
+    if (g.pinch) { if (P.size === 0) { UI.lastPinchEnd = now; g = null; } return; }
+    if (P.size > 0) return; const gg = g; g = null; if (e.type === 'pointercancel') return;
+    const isTap = !gg.drag && gg.moved < 10 && now - gg.t0 < 300 && now - UI.lastPinchEnd > 300; if (!isTap) return;
+    const id = pick(e.clientX, e.clientY); UI.tapLog.push(id || '-');
+    if (id) { UI.lastEmptyTap = 0; UI.sel = id === G.S.loc ? null : id; if (UI.sel) G.tutUse('T8'); UI.refresh(); return; } // 노드 위 더블탭은 선택만
+    if (UI.lastEmptyTap && now - UI.lastEmptyTap < 300) { UI.lastEmptyTap = 0; zReset(); } else UI.lastEmptyTap = now; };
+  svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
+}
+function fitNodes() { const svg = document.querySelector('svg.map'); if (!svg) return; const z = UI.zoom ? UI.zoom.k : 1;
+  const sc = (Math.min(svg.clientWidth / 390, svg.clientHeight / 560) || 1) * z * (UI.appScale || 1); const r = Math.max(33 / z, 23 / sc);
+
+  svg.querySelectorAll('.node circle[fill="transparent"]').forEach(c => c.setAttribute('r', r.toFixed(1)));
+  // 지명은 화면 기준 13px 이상(외곽선 유지), 위험도 숫자는 12px 이상
+  const fs = Math.max(18 / Math.max(1, z), 13 / sc), rs = Math.max(17 / Math.max(1, z), 12 / sc);
+  svg.querySelectorAll('.node text').forEach(t => { if (/[가-힣]/.test(t.textContent)) { t.setAttribute('font-size', fs.toFixed(1)); t.setAttribute('y', (+t.closest('.node').querySelector('circle').getAttribute('cy') + 18 + fs).toFixed(1)); } else t.setAttribute('font-size', rs.toFixed(1)); });
+  }

@@ -8,7 +8,7 @@ button:disabled{opacity:.45}
 button.pri{background:#b45309;color:#fff;font-weight:700}
 button.red{background:#991b1b}
 button.ghost{background:transparent;border:1px solid #57534e}
-button.sm{min-height:44px;padding:4px 8px;font-size:13px}
+button.sm{min-height:44px;min-width:44px;padding:4px 8px;font-size:13px}
 .big{min-height:52px;font-size:17px;width:100%}
 #start{justify-content:center;align-items:center;padding:24px;gap:12px;text-align:center;background:radial-gradient(circle at 50% 30%,#44260f,#0c0a09)}
 #start h1{font-size:30px;margin:0;letter-spacing:4px}
@@ -123,3 +123,16 @@ svg.map{width:100%;height:52vh;min-height:150px;max-height:540px;display:block;t
 .sumlist{margin:4px 0 8px;padding-left:18px;line-height:1.5;font-size:14px;max-height:50vh;overflow:auto}
 #toast div{max-width:100%}
 #goalBd{position:absolute;inset:0;z-index:69;background:#0004}
+
+.zctl{position:absolute;right:6px;bottom:6px;display:flex;align-items:center;gap:4px;background:#1c1917cc;border-radius:12px;padding:2px}
+.zctl button{min-width:44px;min-height:44px;font-size:20px;padding:0}
+.zctl span{min-width:44px;text-align:center;font-size:13px;color:#e7e5e4}
+svg.map{touch-action:none}
+#narrow{position:absolute;left:0;right:0;top:120px;z-index:55;background:#78350f;color:#fef3c7;font-size:13px;display:flex;align-items:center;justify-content:space-between;padding:0 4px 0 10px}
+#narrow button{min-width:44px;min-height:44px;background:none;color:#fef3c7}
+#rot{position:fixed;inset:0;z-index:200;background:#0c0a09;color:#fef3c7;display:flex;align-items:center;justify-content:center;text-align:center;font-size:22px}
+#rot.hidden,#narrow.hidden{display:none}
+#top.compact .goal.sub#subg{display:flex}
+body.narrow button{min-height:50px}
+body.narrow .icon,body.narrow .zctl button,body.narrow #narrow button{min-width:50px}
+body.narrow button.sm{min-width:50px}body.narrow #narrow button{min-height:50px}

@@ -63,4 +63,37 @@ S = fresh(); S.visited = ['a', 'b', 'c']; ok(JSON.stringify(G.goalProg(14)) === 
 S = fresh(); S.kills = 3; S.realm = 3; S.ev.branched = 'choosing'; G.chooseRoute(3); ok(S.goals.claimed.indexOf(0) >= 0 && S.goals.claimed.indexOf(6) >= 0, 'L6 분기 시 채운 1막 목표 자동 지급');
 
 S = fresh(); S.realm = 4; S.goals.mainIdx = 14; S.visited = Object.keys(D.REGIONS).filter(id => !G.closed(id) && G.risk(id) <= 4).slice(1); { const w = G.whereTo(); const rem = G.unvisitedOk(); ok(rem.length >= 1 && rem.every(r => w.why.indexOf(G.rname(r)) >= 0), 'N3 남은 지역 이름 표시: ' + w.why); }
+
+// ---- v0.6 2-24 ----
+// #45 중간 목표
+S = fresh(); S.turn = 4; S.realm = 2; S.mer = 2; S.sub.last = 3; G.subStall();
+ok(S.sub.cur === 'SG02', '#45 4턴 첫 중간 목표 = SG02(SG01 무공 조건은 1a 전 건너뜀) ' + S.sub.cur);
+ok(/정경 한 걸음: 정경 4개/.test(G.subText().t), '#45 문구·진행 ' + G.subText().t);
+let sv = S.silver; S.mer = 4; G.subTick(); ok(S.silver === sv + 10 && S.sub.done.indexOf('SG02') >= 0 && G.msgs.some(m => /중간 목표/.test(m)), '#45 채우면 자동 지급 은자 +10 + 토스트');
+S.sub.cur = 'SG00'; S.sub.base = G.subMetric('any')[0] + 1; const xp0 = S.xp; S.acts = 3; G.train(); ok(S.xp - xp0 < G.trainAmt() + 20 - 0.01, '#45 같은 턴 두 번째 중간 목표 보상 없음(턴당 1개)');
+S.turn = 5; G.subTick(); ok(S.sub.gotTurn === 5, '#45 다음 턴에 지급');
+S = fresh(); S.turn = 8; S.realm = 2; S.mer = 12; S.sub.last = 5; S.sub.goalsSeen = 99; G.subStall(); ok(S.sub.cur === 'SG00' && /이번 달/.test(G.subText().t), '#45 3턴째 보상 없음 → SG00');
+['SG04', 'SG07', 'SG09', 'SG12'].forEach(id => ok(G.subMetric(G.subRow(id)[3]) === null, '#45 ' + id + ' 1a 전 채울 수 없음 → 건너뜀'));
+ok(D.SUBG.length === 13, '#45 D.SUBG 13줄');
+// 자동 진행: 매 턴 수련 1~3회(가끔 아무것도 안 함) → 보상 공백 ≤ 4턴, 은자 합 ≤ 50
+{ let worst = 0, silv = 0;
+  for (let seed = 1; seed <= 30; seed++) { S = fresh(); S.realm = 2; let lastR = 3, prevN = 0, prevSeen = 0; G.rand = (() => { let a = seed * 9301; return () => (a = (a * 16807) % 2147483647) / 2147483647; })();
+    for (let t = 1; t <= 24; t++) { S.turn = t; S.acts = 3; G.subStall(); const k = 1 + Math.floor(G.rand() * 3); // 매 턴 한 번은 행동(싸움·수련·타통 중 하나)
+      for (let i = 0; i < k; i++) { S.acts = 3; G.train(); }
+      if (G.rand() < 0.3 && S.mer < 12) { S.mer += 2; G.subTick(); }
+      if (t >= 4) { if (S.sub.n > prevN || S.sub.goalsSeen > prevSeen) lastR = t; worst = Math.max(worst, t - lastR); prevN = S.sub.n; prevSeen = S.sub.goalsSeen; }
+      G.queue.length = 0; G.msgs.length = 0; }
+    silv = Math.max(silv, S.sub.silver); }
+  delete G.rand; ok(worst <= 4, '#45 보상 공백 최대 ' + worst + '턴 (≤4)'); ok(silv <= 50, '#45 중간 목표 은자 합 최대 ' + silv + ' (≤50)'); }
+// 저장 이전
+{ S = fresh(); delete S.sub; delete S.cnt; delete S.tut.personal.used; localStorage.setItem('murim_save_v5', JSON.stringify(S)); const L = G.load(); ok(L && L.sub && L.cnt && L.tut.personal.used, '#45 옛 저장 불러오기 → S.sub·S.cnt 빈 값 생성'); }
+// #46 튜토리얼 넘김
+S = fresh(); S.tut.personal.skipped = false; S.turn = 1; ok(G.tutCurrent().id === 'T1', '#46 T1 표시');
+G.tutUse('T1'); ok(G.tutCurrent().id === 'T2', '#46 (나) [싸움] 시트 열기 → 즉시 T2');
+G.tutUse('T2'); ok(G.tutCurrent().id === 'T3', '#46 T2 수련 → T3');
+G.tutUse('T1'); ok(G.tutCurrent().id === 'T3', '#46 T3은 시트 열기만으로 안 넘어감');
+G.tutUse('T3'); ok(!G.tutCurrent() || G.tutCurrent().id !== 'T3', '#46 T3 두목전 첫 기세 뒤 넘어감');
+S.turn = 2; S.explores = 1; ok(G.tutCurrent().id === 'T5', '#46 (다) 탐색 조건 이미 채움 → T4 말풍선 없이 T5');
+S.turn = 4; ok(G.tutCurrent().id === 'T5', '#46 T5 2턴에 처음 뜸 → 4턴까지 유지'); S.turn = 5; ok(G.tutCurrent().id !== 'T5', '#46 (가) 3턴 안 건드림 → 자동');
+{ S = fresh(); S.tut.personal.skipped = false; S.tut.personal.t10 = false; const it = S.items['금창약']; G.startRest('ne', false); ok(S.items['금창약'] === it && !S.tut.personal.t10, '#46 T10: 폐관 시작만으로는 완료 아님'); G.t10Done(); G.t10Done(); ok(S.items['금창약'] === it + 1, '#46 T10 출관 화면 1번 → 완료, 보상 중복 0'); }
 console.log(fail ? fail + ' FAILED' : 'ALL PASS'); process.exit(fail ? 1 : 0);

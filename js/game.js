@@ -36,6 +36,10 @@ G.push = ev => G.queue.push(ev);
 G.mark = () => { G.S.off.acted = true; };
 G.capStats = () => { const S = G.S; S.mu = Math.min(100, S.mu); S.ne = Math.min(100, S.ne); };
 
+// 저장 이전(v5 키 그대로): 없으면 빈 값
+G.subInit = () => ({ cur: null, base: 0, q: [], done: [], last: 0, gotTurn: 0, n: 0, silver: 0, goalsSeen: 0 });
+G.cntInit = () => ({ win: 0, train: 0, set: { nok: 0, suro: 0, hao: 0 }, adv: 0, r4: 0 });
+G.migrate = function (S) { if (!S.sub) S.sub = G.subInit(); if (!S.cnt) S.cnt = G.cntInit(); if (S.tut && S.tut.personal && !S.tut.personal.used) S.tut.personal.used = {}; };
 G.newGame = function (name, skipTut) {
   const now = Date.now();
   const seed = parseInt(Q.get('seed')) || (now % 100000);
@@ -49,7 +53,7 @@ G.newGame = function (name, skipTut) {
     ynPaid: false, sohwanTurn: 0, yeonhwaHerb: false, letter: false, tobeolDone: 0, wantedRw: {}, chaos: {}, merchant: null, extraQuestSlot: false,
     ev: { tourney6: null, tourney18: null, omen: 0, rival23: null, act1done: false, branched: false, rivalRumor: false, notice17: false },
     goals: { claimed: [], mainIdx: 0, mainSince: 1 }, pendingRw: [],
-    tut: { personal: { step: 0, skipped: !!skipTut, seen: {} }, path: null },
+    tut: { personal: { step: 0, skipped: !!skipTut, seen: {}, used: {} }, path: null }, sub: G.subInit(), cnt: G.cntInit(),
     rumor: '귀주의 산골 마을. 취팔 노개가 객잔 구석에서 졸고 있다.', aiLog: [], owners: {}, route: null, settle: null,
     bounties: [], bountyOffer: [], escort: null, escortOffer: null, bountyDone: 0, escortDone: 0, myPathSeen: false, r3pair: false,
     stats: { fights: 0, losses: 0 },
@@ -63,7 +67,7 @@ G.newGame = function (name, skipTut) {
   return G.S;
 };
 G.save = function () { if (!G.S) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.S)); } catch (e) {} };
-G.load = function () { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return null; const S = JSON.parse(s); if (S.v !== 5) return null; G.S = S; return S; } catch (e) { return null; } };
+G.load = function () { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return null; const S = JSON.parse(s); if (S.v !== 5) return null; G.S = S; G.migrate(S); return S; } catch (e) { return null; } };
 G.fillBucket = function () { const O = G.S.off, n = G.clock(); const bh = Math.max(0, (n - O.bucketTs) / 3600000); O.bucket = Math.min(6.4, O.bucket + 6.4 * bh / 24); O.bucketTs = Math.max(O.bucketTs, n); };
 G.heartbeat = function () { const S = G.S; if (!S || S.off.resting) return; const n = G.clock(); G.fillBucket(); S.off.lastSeen = n; S.off.maxSeen = Math.max(S.off.maxSeen, n); G.save(); };
 
@@ -113,7 +117,7 @@ G.canAct = function (what) {
   if (what === 'fight' && S.injured) return '부상: 이번 턴 싸울 수 없다';
   return null;
 };
-G.train = function () { const S = G.S; if (G.canAct('train')) return; let x = G.trainAmt() * (S.cliff ? 2 : 1); G.useAct(1); S.xp += x; G.toast('수련 +' + Math.round(x) + ' 수련치'); G.after(); };
+G.train = function () { const S = G.S; if (G.canAct('train')) return; let x = G.trainAmt() * (S.cliff ? 2 : 1); G.useAct(1); S.xp += x; S.cnt.train++; G.tutUse('T2'); G.toast('수련 +' + Math.round(x) + ' 수련치'); G.after(); };
 G.moveTargets = function () { // 이동 가능 지역 {id: 칸수}
   const S = G.S; let steps = 1; if (S.realm >= 4) steps = 2; if (S.onceBuy['saeoe']) steps = Math.max(steps, 2);
   const out = {}; let front = [S.loc], seen = { [S.loc]: 0 };
@@ -146,6 +150,7 @@ G.fightResult = function (tgt, win, w) {
   S.firstAtk = false;
   if (tgt.kind === 'boss') { S.haomun = false; S.dokcho = false; }
   const lostBefore = S.lostLast; S.lostLast = !win;
+  if (win) { S.cnt.win++; if (S.realm >= 4 && G.risk(S.loc) >= 4) S.cnt.r4++; }
   if (!win) { S.stats.losses++; S.injured = true; if (tgt.kind === 'boss') { S.bossLoss[id] = (S.bossLoss[id] || 0) + 1; S.lostBossOnce[id] = true; }
     G.push({ type: 'info', title: '패배 — 실패 없는 후퇴', text: '부상: 이번 턴 끝까지 싸울 수 없다. 잃은 것은 없다.\n취팔 노개: "권장: 정경 ' + G.gateMer() + ' / ' + D.REALM[Math.min(5, S.realm + 1)] + '"' }); G.after(); return; }
   const r = G.risk(id), base = D.REW[r]; let s, x, f;
@@ -193,6 +198,9 @@ G.settleQuests = function () {
   }
 };
 // ---------- 탐색 ----------
+// 싸움 결과 토스트는 한 줄로 합친다
+{ const fr = G.fightResult; G.fightResult = function () { const n = G.msgs.length; const r = fr.apply(this, arguments);
+  if (G.msgs.length - n > 1) { const m = G.msgs.splice(n); G.msgs.push(m.join(' · ')); } return r; }; }
 G.explore = function () {
   const S = G.S; if (G.canAct('explore')) return; G.useAct(1); S.explores = (S.explores || 0) + 1;
   const id = S.loc;
@@ -333,7 +341,7 @@ G.tatongCost = function () {
 G.tatongGlow = function () { const S = G.S; return !G.tatongBlock() && S.mer < G.gateMer() && S.xp >= G.needXp() * 0.5; };
 G.tatongAuto = () => G.S.warm || G.S.freeTat || G.S.cha;
 // perfect: 운기행공 모두 맞힘
-G.doTatong = function (perfect) {
+G.doTatong = function (perfect) { G.tutUse('T6'); G.tutUse('T7');
   const S = G.S; if (G.tatongBlock()) return null;
   const cost = G.tatongCost(); S.silver -= cost; S.acts = 0; G.mark(); S.lastTat = S.turn; S.tatongs = (S.tatongs || 0) + 1;
   if (G.tatongAuto()) perfect = true;
@@ -535,7 +543,7 @@ G.hiddenAI = function () { // 9-1 간이판 (화면에는 소문 1줄만)
   return line;
 };
 G.turnStart = function () {
-  const S = G.S, t = S.turn;
+  const S = G.S, t = S.turn; G.subStall();
   G.goalLines(); { const st = t - S.goals.mainSince; if (st >= 2 && st % 2 === 0 && S.turn <= 24 && !S.route) S.todo = true; } // v0.5.2 ③ 2턴 정체
   if (S.mer !== S.merPrev) { S.merPrev = S.mer; S.merChange = t; }
   if (t === 3 && !S.ev.rivalRumor) { S.ev.rivalRumor = true; G.push({ type: 'info', title: '강호 소문', text: '"화산의 대제자가 검 한 자루 낭인을 찾는다더군." — 취팔 노개' }); }
@@ -594,6 +602,46 @@ G.pathTutCheck = function () {
 };
 G.skipPathTut = function () { const S = G.S, P = S.tut.path; if (!P) return; for (let i = P.step; i < 5; i++) G.give(D.RTUT[i].rw); P.skipped = true; P.step = 5; G.toast('낭인 튜토리얼 건너뛰기: 남은 보상 일괄 지급'); G.after(); };
 // ---------- 튜토리얼 ----------
+// ---------- 중간 목표 (2-24-1) ----------
+G.SUBG_STALL = 3;
+G.subMetric = function (k) { const S = G.S;
+  if (k === 'mer') return S.mer < 12 && S.realm >= 2 ? [S.mer, Math.min(12, S.mer + 2)] : null;
+  if (k === 'risk4') return S.realm >= 4 ? [S.cnt.r4, null] : null;
+  if (k === 'any') return [S.cnt.win + S.cnt.train + (S.tatongs || 0) + (S.imdok ? 1 : 0), null];
+  return null; }; // move·learn·set_nok·set_other·sin·adv: 무공 체계(1a) 전에는 채울 수 없음 → 건너뜀
+G.subNeed = (k, b) => (k === 'mer' ? b[1] : b[0] + (k === 'set_nok' ? 2 : 1));
+G.subRow = id => D.SUBG.find(x => x[0] === id);
+G.subActive = () => { const S = G.S; return !S.route && S.turn >= 4 && S.turn <= 24; };
+G.subPick = function () { const S = G.S, sg = S.sub, t = S.turn;
+  for (const x of D.SUBG) if (x[0] !== 'SG00' && x[1] <= t && t <= x[2] && sg.done.indexOf(x[0]) < 0 && sg.q.indexOf(x[0]) < 0) sg.q.push(x[0]);
+  sg.q = sg.q.filter(i => { const x = G.subRow(i); return x[1] <= t && t <= x[2]; });
+  while (sg.q.length) { const i = sg.q.shift(), x = G.subRow(i), b = G.subMetric(x[3]); if (!b) continue; sg.cur = i; sg.base = G.subNeed(x[3], b); return; }
+  sg.cur = null; };
+G.subVal = function () { const S = G.S, sg = S.sub; if (!sg.cur) return null; const b = G.subMetric(G.subRow(sg.cur)[3]); return b ? b[0] : null; };
+G.subNoteReward = function () { const S = G.S; if (S.sub) S.sub.last = S.turn; };
+// 목표(주·사건·성장) 완료 감지: 채워진 목표 수가 늘면 보상 시점으로 친다
+G.subGoalsWatch = function () { const S = G.S; let n = 0; for (let i = 0; i < D.GOALS.length; i++) if (S.goals.claimed.indexOf(i) >= 0 || G.goalCond(i)) n++;
+  if (n > (S.sub.goalsSeen || 0)) { S.sub.goalsSeen = n; S.sub.last = S.turn; } };
+G.subTick = function () { const S = G.S; if (!S || !S.sub) return; G.subGoalsWatch(); if (!G.subActive()) return; const sg = S.sub;
+  if (!sg.cur) G.subPick(); if (!sg.cur) return;
+  const v = G.subVal(); if (v === null) { sg.cur = null; G.subPick(); return; }
+  if (v >= sg.base && sg.gotTurn !== S.turn) { // 한 턴에 1개까지
+    const x = G.subRow(sg.cur), rw = x[5]; if (rw.xp) S.xp += rw.xp; if (rw.silver) { S.silver += rw.silver; sg.silver += rw.silver; }
+    if (x[0] !== 'SG00') sg.done.push(x[0]); sg.n++; sg.gotTurn = S.turn; sg.last = S.turn; (sg.log = sg.log || []).push([S.turn, x[0]]);
+    G.toast('✔ 중간 목표 — ' + (rw.xp ? '수련치 +' + rw.xp : '') + (rw.silver ? '은자 +' + rw.silver : '') + (rw.mgx ? '성 경험 +' + rw.mgx : ''));
+    sg.cur = null; G.subPick(); } };
+G.subStall = function () { const S = G.S; if (!S.sub || !G.subActive()) return; const sg = S.sub; G.subGoalsWatch();
+  if (sg.last === 0) sg.last = Math.max(sg.last, 3); // 4턴 시작 기준
+  if (sg.cur !== 'SG00' && S.turn - sg.last >= G.SUBG_STALL) { if (sg.cur) sg.q.push(sg.cur); sg.cur = 'SG00'; sg.base = G.subMetric('any')[0] + 1; }
+  G.subTick(); };
+G.subText = function () { const S = G.S, sg = S.sub; if (!sg || !sg.cur || !G.subActive()) return null; const x = G.subRow(sg.cur), b = G.subMetric(x[3]);
+  const t = x[4].replace('{need}', sg.base); const rw = x[5];
+  let prog = ''; if (b) { const from = x[3] === 'mer' ? b[0] : b[0] - (sg.base - (x[3] === 'set_nok' ? 2 : 1)); prog = x[3] === 'mer' ? '' : ' (' + Math.max(0, from) + '/' + (x[3] === 'set_nok' ? 2 : 1) + ')'; }
+  return { t: t + prog, rw: rw.xp ? '수련치 +' + rw.xp : rw.silver ? '은자 +' + rw.silver : '성 경험 +' + rw.mgx }; };
+// ---------- 튜토리얼 ----------
+// 2-24-2: 관련 UI를 열거나 쓰면 즉시 넘어간다. T3은 그 두목전 첫 기세 뒤, T10은 출관 화면 1번(t10Done)
+G.tutUse = function (id) { const S = G.S; if (!S || !S.tut || !S.tut.personal) return; const pt = S.tut.personal; pt.used = pt.used || {};
+  const i = D.TUT.findIndex(x => x.id === id); if (i < 0 || i >= 9) return; if (S.turn < G.tutUnlock(i)) return; pt.used[i] = 1; };
 G.tutCond = function (i) {
   const S = G.S, pt = S.tut.personal;
   // 실제 행동으로도 넘어간다(경맥 화면을 안 봐도 타통·일류면 T6 완료)
@@ -605,7 +653,8 @@ G.tutUnlock = i => [1, 1, 1, 2, 2, 2, 3, 4, 4, 1][i];
 G.TUT_STALL = 3;
 G.tutCurrent = function () { const S = G.S, pt = S.tut.personal; if (pt.skipped) return null;
   pt.done = pt.done || {}; pt.shown = pt.shown || {};
-  for (let i = 0; i < 9; i++) if (!pt.done[i] && G.tutCond(i)) pt.done[i] = 1;
+  pt.used = pt.used || {};
+  for (let i = 0; i < 9; i++) if (!pt.done[i] && (G.tutCond(i) || pt.used[i])) pt.done[i] = pt.used[i] && !G.tutCond(i) ? 'used' : 1;
   for (let i = 0; i < 9; i++) { if (pt.done[i]) continue; if (S.turn < G.tutUnlock(i)) return null;
     if (i === 5 && !(S.xp >= 300 || S.turn >= 3)) return null; // 경맥은 막혔을 때
     if (pt.shown[i] === undefined) pt.shown[i] = S.turn;
@@ -616,7 +665,7 @@ G.skipTutorial = function (silent) { const S = G.S, pt = S.tut.personal; pt.skip
   if (!pt.t10) { pt.t10 = true; S.items['금창약']++; } if (!silent) G.toast('튜토리얼 건너뛰기: 남은 보상 일괄 지급(목표 바 보상은 목표 바에서). 금창약 +1'); G.save(); };
 G.t10Done = function () { const S = G.S, pt = S.tut.personal; if (!pt.t10) { pt.t10 = true; S.items['금창약']++; G.toast('튜토리얼 T10 완료: 금창약 +1'); } };
 // 공통 사후 처리
-G.after = function () { const S = G.S; if (S.route) G.grantRemaining(); G.pathTutCheck(); G.save(); };
+G.after = function () { const S = G.S; G.subTick(); if (S.route) G.grantRemaining(); G.pathTutCheck(); G.save(); };
 
 // ---------- 실시간 폐관 (2-23, F14) ----------
 G.E0 = h => Math.min(h, 2) + 0.7 * Math.max(0, Math.min(h, 6) - 2) + 0.4 * Math.max(0, Math.min(h, 10) - 6);
@@ -664,7 +713,6 @@ G.startRest = function (type, withTat) {
   if (withTat && !G.tatongBlock()) { tat = G.doTatong(false); if (tat) { S.lastTat = S.turn; G.endTurnSilent(); } }
   O.pendingTat = tat; O.resting = true; O.lastSeen = G.clock(); O.maxSeen = Math.max(O.maxSeen, O.lastSeen); O.acted = true; // 새 회차
   O.sessH = 0; O.sessE = 0; O.actedAfterRest = false;
-  if (S.tut.personal && !S.tut.personal.skipped) G.t10Done(); else G.t10Done();
   G.save(); return tat;
 };
 G.endTurnSilent = function () { G.endTurn(); };
