@@ -15,10 +15,15 @@ function flushToasts() { if (!G.msgs.length) return; clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { const tb = $('#toast'); const vis = [...tb.children].map(d => d.textContent);
     const all = vis.concat(G.msgs.splice(0)); if (!all.length) return;
     const nLines = all.reduce((n, t) => n + String(t).split('\n').length, 0);
-    if (all.length >= 3 || nLines >= 3) { if (UI.busy || !$('#modal').classList.contains('hidden')) { G.msgs.unshift(...all.slice(vis.length)); toastTimer = setTimeout(flushToasts, 400); return; }
-      tb.innerHTML = ''; modal({ title: '알림 ' + all.length + '건', html: '<ul class="sumlist">' + all.map(t => '<li>' + esc(t).replace(/\n/g, '<br>') + '</li>').join('') + '</ul>' }); return; }
+    if (all.length >= 3 || nLines >= 3) {       tb.innerHTML = ''; modal({ title: '알림 ' + all.length + '건', html: '<ul class="sumlist">' + all.map(t => '<li>' + esc(t).replace(/\n/g, '<br>') + '</li>').join('') + '</ul>' }); return; }
     tb.innerHTML = ''; for (const t of all) { const d = document.createElement('div'); d.textContent = t; tb.appendChild(d); setTimeout(() => d.remove(), 3500); } }, 60); }
-function modal(o) { // {title, text, html, buttons:[{t, cls, fn, keep}]}
+// 모든 모달은 하나의 줄(queue)로: 한 번에 하나만, 앞의 것이 닫혀야 다음 것이 열린다
+let modalQ = Promise.resolve(); UI.modalLog = []; UI.modalPending = 0;
+function modal(o) { UI.modalPending++;
+  const p = modalQ.then(() => showModal(o)); modalQ = p.then(() => { UI.modalPending--; }, () => { UI.modalPending--; }); return p; }
+function showModal(o) { // {title, text, html, buttons:[{t, cls, fn, keep}]}
+  UI.modalLog.push(o.title || '');
+  if (UI.goalOpen) { UI.goalOpen = false; compactTop(); }
   return new Promise(res => {
     const m = $('#modal'); m.classList.remove('hidden');
     m.innerHTML = '<div class="sheet"><h2>' + esc(o.title || '') + '</h2>' + (o.text ? '<div class="txt">' + esc(o.text) + '</div>' : '') + (o.html || '') + '<div class="btns"></div></div>';
@@ -509,7 +514,12 @@ async function routeCards(again) {
 function compactTop() { const t = $('#top'); const c = window.innerHeight < 720; let ph = $('#topPh');
   if (!ph) { ph = document.createElement('div'); ph.id = 'topPh'; t.parentNode.insertBefore(ph, t); }
   t.classList.remove('open'); ph.style.height = '0px'; t.classList.toggle('compact', c);
-  if (c && UI.goalOpen) { ph.style.height = t.offsetHeight + 'px'; t.classList.add('open'); } // 펼침은 지도 위에 겹쳐 띄우고 자리는 접힌 높이만큼만
+  if (c && UI.goalOpen) { ph.style.height = t.offsetHeight + 'px'; t.classList.add('open'); }
+  let bd = $('#goalBd'); const want = c && UI.goalOpen;
+  if (want && !bd) { bd = document.createElement('div'); bd.id = 'goalBd'; $('#app').appendChild(bd);
+    const swallow = e => { e.preventDefault(); e.stopPropagation(); if ((e.type === 'click' || e.type === 'touchend') && UI.goalOpen) { UI.goalOpen = false; compactTop(); placeBubble(); } };
+    ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click'].forEach(ev => bd.addEventListener(ev, swallow, { passive: false })); }
+  if (!want && bd) bd.remove(); // 펼침은 지도 위에 겹쳐 띄우고 자리는 접힌 높이만큼만
   const g = t.querySelector('.goal .gt'); if (g && c) g.onclick = () => { UI.goalOpen = !UI.goalOpen; compactTop(); fitMap(); placeBubble(); }; }
 function fitMap() { compactTop(); const svg = document.querySelector('svg.map'), grid = document.querySelector('.acts-grid'); if (!svg || !grid) return;
   const top = ($('#top').classList.contains('open') ? $('#topPh') : $('#top')).getBoundingClientRect().height, tabs = $('#tabs').getBoundingClientRect().height, sel = (document.querySelector('.selbar') || document.querySelector('.rumor') || { offsetHeight: 0 }).offsetHeight;
@@ -604,4 +614,4 @@ window.addEventListener('error', e => { console.error('murim error', e.message);
 startScreen();
 })();
 
-document.addEventListener('click', e => { if (UI.goalOpen && !e.target.closest('#top')) { UI.goalOpen = false; compactTop(); placeBubble(); } }, true);
+
