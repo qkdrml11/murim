@@ -573,7 +573,7 @@ G.settlement = function () {
 // 분기 뒤에도 채운 1막 목표 보상은 자동 지급(받을 곳이 사라지지 않게)
 G.grantRemaining = function () { const S = G.S; const t = [];
   for (let i = 0; i < D.GOALS.length; i++) if (S.goals.claimed.indexOf(i) < 0 && G.goalCond(i)) { S.goals.claimed.push(i); G.give(D.GOALS[i][1]); t.push('✔ ' + D.GOALS[i][0] + G.giveText(D.GOALS[i][1])); }
-  if (t.length) G.toast(t.join('\n')); };
+  t.forEach(x => G.toast(x)); };
 G.chooseRoute = function (n) {
   const S = G.S; if (n !== 3) return false;
   S.route = 3; S.ev.branched = 'ronin'; G.grantRemaining();

@@ -9,7 +9,15 @@ const S = () => G.S;
 const bandBadge = w => { const [t, c] = DuelLib.band(w); return '<span class="badge b-' + c + '">' + t + (G.debug ? ' ' + Math.round(w * 100) + '%' : '') + '</span>'; };
 
 // ---------- 공통: 토스트·모달 ----------
-function flushToasts() { while (G.msgs.length) { const d = document.createElement('div'); d.textContent = G.msgs.shift(); const tb = $('#toast'); tb.appendChild(d); while (tb.children.length > 4) tb.firstChild.remove(); setTimeout(() => d.remove(), 3300); } }
+// 토스트는 한 번에 2개까지. 3개 이상 몰리면 요약 모달 1개로 묶는다(버튼 위로 쌓이지 않게)
+let toastTimer = null;
+function flushToasts() { if (!G.msgs.length) return; clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { const tb = $('#toast'); const vis = [...tb.children].map(d => d.textContent);
+    const all = vis.concat(G.msgs.splice(0)); if (!all.length) return;
+    const nLines = all.reduce((n, t) => n + String(t).split('\n').length, 0);
+    if (all.length >= 3 || nLines >= 3) { if (UI.busy || !$('#modal').classList.contains('hidden')) { G.msgs.unshift(...all.slice(vis.length)); toastTimer = setTimeout(flushToasts, 400); return; }
+      tb.innerHTML = ''; modal({ title: '알림 ' + all.length + '건', html: '<ul class="sumlist">' + all.map(t => '<li>' + esc(t).replace(/\n/g, '<br>') + '</li>').join('') + '</ul>' }); return; }
+    tb.innerHTML = ''; for (const t of all) { const d = document.createElement('div'); d.textContent = t; tb.appendChild(d); setTimeout(() => d.remove(), 3500); } }, 60); }
 function modal(o) { // {title, text, html, buttons:[{t, cls, fn, keep}]}
   return new Promise(res => {
     const m = $('#modal'); m.classList.remove('hidden');
@@ -498,15 +506,21 @@ async function routeCards(again) {
   G.claim(); refresh();
 }
 // ---------- 말풍선(튜토리얼) ----------
-function compactTop() { const t = $('#top'); const c = window.innerHeight < 720; t.classList.toggle('compact', c); t.classList.toggle('open', c && !!UI.goalOpen);
+function compactTop() { const t = $('#top'); const c = window.innerHeight < 720; let ph = $('#topPh');
+  if (!ph) { ph = document.createElement('div'); ph.id = 'topPh'; t.parentNode.insertBefore(ph, t); }
+  t.classList.remove('open'); ph.style.height = '0px'; t.classList.toggle('compact', c);
+  if (c && UI.goalOpen) { ph.style.height = t.offsetHeight + 'px'; t.classList.add('open'); } // 펼침은 지도 위에 겹쳐 띄우고 자리는 접힌 높이만큼만
   const g = t.querySelector('.goal .gt'); if (g && c) g.onclick = () => { UI.goalOpen = !UI.goalOpen; compactTop(); fitMap(); placeBubble(); }; }
 function fitMap() { compactTop(); const svg = document.querySelector('svg.map'), grid = document.querySelector('.acts-grid'); if (!svg || !grid) return;
-  const top = $('#top').getBoundingClientRect().height, tabs = $('#tabs').getBoundingClientRect().height, sel = (document.querySelector('.selbar') || document.querySelector('.rumor') || { offsetHeight: 0 }).offsetHeight;
+  const top = ($('#top').classList.contains('open') ? $('#topPh') : $('#top')).getBoundingClientRect().height, tabs = $('#tabs').getBoundingClientRect().height, sel = (document.querySelector('.selbar') || document.querySelector('.rumor') || { offsetHeight: 0 }).offsetHeight;
   const ex = document.querySelector('.extra'); const exH = ex && ex.children.length ? ex.getBoundingClientRect().height + 6 : 0;
   const avail = window.innerHeight - top - tabs - sel - grid.offsetHeight - exH - 14; svg.style.height = Math.max(150, Math.min(540, avail)) + 'px';
   // 터치 원은 지도 배율과 상관없이 화면 기준 지름 46px 이상
   const sc = Math.min(svg.clientWidth / 390, svg.clientHeight / 560) || 1; const r = Math.max(33, 23 / sc);
   svg.querySelectorAll('.node circle[fill="transparent"]').forEach(c => c.setAttribute('r', r.toFixed(1)));
+  // 지명은 화면 기준 13px 이상(외곽선 유지), 위험도 숫자는 12px 이상
+  const fs = Math.max(18, 13 / sc), rs = Math.max(17, 12 / sc);
+  svg.querySelectorAll('.node text').forEach(t => { if (/[가-힣]/.test(t.textContent)) { t.setAttribute('font-size', fs.toFixed(1)); t.setAttribute('y', (+t.closest('.node').querySelector('circle').getAttribute('cy') + 18 + fs).toFixed(1)); } else t.setAttribute('font-size', rs.toFixed(1)); });
   // 토스트는 상단 바 바로 아래(지도 위)에 띄워 행동 버튼을 가리지 않게
   const tb = $('#toast'); if (tb) { tb.style.bottom = 'auto'; tb.style.top = ($('#top').getBoundingClientRect().bottom - $('#app').getBoundingClientRect().top + 6) + 'px'; } }
 window.addEventListener('resize', () => { fitMap(); placeBubble(); });
@@ -589,3 +603,5 @@ window.addEventListener('pagehide', () => { if (G.S) G.heartbeat(); });
 window.addEventListener('error', e => { console.error('murim error', e.message); });
 startScreen();
 })();
+
+document.addEventListener('click', e => { if (UI.goalOpen && !e.target.closest('#top')) { UI.goalOpen = false; compactTop(); placeBubble(); } }, true);
