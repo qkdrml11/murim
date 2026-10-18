@@ -472,13 +472,14 @@ G.bfsFirstStep = function (pred) { const S = G.S; const prev = { [S.loc]: null }
     const hits = nf.filter(pred).sort(); if (hits.length) { let g = hits[0], c = g; while (prev[c] !== S.loc) c = prev[c]; return { goal: g, step: c }; } front = nf; }
   return null; };
 // [어디로?] 대상
+G.unvisitedOk = function () { const S = G.S; return Object.keys(D.REGIONS).filter(id => S.visited.indexOf(id) < 0 && !G.closed(id) && G.risk(id) <= S.realm).sort(); };
 G.whereTo = function () {
   const S = G.S; const out = new Set(); const adj = Object.keys(G.moveTargets());
   const lock = G.breakLock();
   if (lock && !G.tatongSpot(S.loc)) { for (const a of adj) if (G.tatongSpot(a)) out.add(a); if (out.size) return { ids: [...out], why: '타통하려면 객잔이나 산으로' }; }
   const m = S.goals.mainIdx;
-  if (m === 14) { const un = adj.filter(a => S.visited.indexOf(a) < 0 && G.risk(a) <= S.realm); if (un.length) return { ids: un, why: '아직 밟지 않은 땅' };
-    const st = G.bfsFirstStep(id => S.visited.indexOf(id) < 0 && G.risk(id) <= S.realm); if (st) return { ids: [st.step], why: '미방문 ' + G.rname(st.goal) + '(으)로 가는 길' }; }
+  if (m === 14) { const un = adj.filter(a => S.visited.indexOf(a) < 0 && G.risk(a) <= S.realm); if (un.length) return { ids: un, why: '미방문: ' + un.map(G.rname).join('·') };
+    const st = G.bfsFirstStep(id => S.visited.indexOf(id) < 0 && G.risk(id) <= S.realm); if (st) return { ids: [st.step], why: '미방문 ' + G.rname(st.goal) + '(으)로 가는 길' + (S.visited.length >= 8 ? ' (남은 곳: ' + G.unvisitedOk().map(G.rname).join('·') + ')' : '') }; }
   for (const a of adj) {
     if (S.visited.indexOf(a) < 0 && G.risk(a) <= S.realm + 1) out.add(a);
     if (G.bossAlive(a) && G.risk(a) <= S.realm) { const w = G.predict(G.bossOf(a), 'boss', a).w; if (w >= 0.6) out.add(a); }

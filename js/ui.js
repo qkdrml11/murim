@@ -76,7 +76,7 @@ async function enterGame(isNew) {
 }
 // ---------- 상단 바 ----------
 const progTxt = i => { const p = G.goalProg(i); return p ? ' (' + Math.min(p[0], p[1]) + '/' + p[1] + ')' : ''; };
-const todoHint = () => { const w = G.whereTo(); return w.ids.length && w.why ? ' → ' + (w.why.indexOf('길') >= 0 || w.why.indexOf('땅') >= 0 || w.why.indexOf('객잔') >= 0 ? w.why : w.ids.map(G.rname).join('·')) : ''; };
+const todoHint = () => { const w = G.whereTo(); return w.ids.length && w.why ? ' → ' + (w.why.indexOf('길') >= 0 || w.why.indexOf('미방문') >= 0 || w.why.indexOf('객잔') >= 0 ? w.why : w.ids.map(G.rname).join('·')) : ''; };
 function topHTML() {
   const s = S(); let h = '';
   const P = s.tut.path;
@@ -135,7 +135,7 @@ function regionCard(id) {
   h += '<div class="row"><span class="muted">소탕도</span><div class="bar"><i style="width:' + Math.max(0, 100 - k * 33) + '%;background:' + (k ? '#78716c' : '#22c55e') + '"></i></div>' + (k ? '<span class="muted">소탕도 ×' + (k <= 2 ? 0.5 : 0.25) + '</span>' : '') + '</div>';
   if (k >= 1) h += '<div class="muted">이 고을 졸개들은 몸을 사린다</div>';
   { const dd = s.realm - G.risk(id); if (dd >= 1) h += '<div class="muted">경지 차 감쇠: 출몰 적 보상 ×' + (dd === 1 ? 0.5 : 0.25) + '</div>'; }
-  if (id === 'yunnan' && !s.explored.yunnan && s.turn >= 2) h += '<div class="muted">은거 고수: 개인 위신 300 필요 (현재 ' + G.pres() + ')</div>';
+  if (id === 'yunnan' && s.turn >= 2 && G.pres() < 300) h += '<div class="muted">은거 고수: 개인 위신 300 필요 (현재 ' + G.pres() + ')</div>';
   if (G.bossAlive(id)) { const wb = G.predict(G.bossOf(id), 'boss', id).w; h += '<div class="row"><span class="f">👹 ' + D.LOCAL[id][1] + ' (' + D.REALM[G.bossOf(id)[0]] + ')' + (s.resp[id] ? ' <span class="badge b-r">재등장</span>' : '') + ((s.bossLoss[id] || 0) ? ' <span class="muted">지난 싸움의 상처가 남았다</span>' : '') + '</span>' + bandBadge(wb) + '</div>'; }
   else h += '<div class="row muted">👹 ' + D.LOCAL[id][1] + ' — 처치함 (' + (6 - (s.turn - s.dead[id])) + '턴 뒤 재등장)</div>';
   if (here) { const mt = G.moveTargets(); h += '<div class="muted" style="margin-top:4px">갈 수 있는 곳 (눌러서 선택)</div><div class="nbs">' + Object.keys(mt).map(n => '<button data-nb="' + n + '"><span class="badge b-' + (G.risk(n) <= s.realm ? 'g' : G.risk(n) === s.realm + 1 ? 'o' : 'r') + '">' + G.risk(n) + '</span> ' + G.rname(n) + (s.visited.indexOf(n) < 0 ? ' ·새' : '') + '</button>').join('') + '</div>'; }
@@ -498,9 +498,17 @@ async function routeCards(again) {
   G.claim(); refresh();
 }
 // ---------- 말풍선(튜토리얼) ----------
-function fitMap() { const svg = document.querySelector('svg.map'), grid = document.querySelector('.acts-grid'); if (!svg || !grid) return;
+function compactTop() { const t = $('#top'); const c = window.innerHeight < 720; t.classList.toggle('compact', c); t.classList.toggle('open', c && !!UI.goalOpen);
+  const g = t.querySelector('.goal .gt'); if (g && c) g.onclick = () => { UI.goalOpen = !UI.goalOpen; compactTop(); fitMap(); placeBubble(); }; }
+function fitMap() { compactTop(); const svg = document.querySelector('svg.map'), grid = document.querySelector('.acts-grid'); if (!svg || !grid) return;
   const top = $('#top').getBoundingClientRect().height, tabs = $('#tabs').getBoundingClientRect().height, sel = (document.querySelector('.selbar') || document.querySelector('.rumor') || { offsetHeight: 0 }).offsetHeight;
-  const avail = window.innerHeight - top - tabs - sel - grid.offsetHeight - 14; svg.style.height = Math.max(260, Math.min(540, avail)) + 'px'; }
+  const ex = document.querySelector('.extra'); const exH = ex && ex.children.length ? ex.getBoundingClientRect().height + 6 : 0;
+  const avail = window.innerHeight - top - tabs - sel - grid.offsetHeight - exH - 14; svg.style.height = Math.max(150, Math.min(540, avail)) + 'px';
+  // 터치 원은 지도 배율과 상관없이 화면 기준 지름 46px 이상
+  const sc = Math.min(svg.clientWidth / 390, svg.clientHeight / 560) || 1; const r = Math.max(33, 23 / sc);
+  svg.querySelectorAll('.node circle[fill="transparent"]').forEach(c => c.setAttribute('r', r.toFixed(1)));
+  // 토스트는 상단 바 바로 아래(지도 위)에 띄워 행동 버튼을 가리지 않게
+  const tb = $('#toast'); if (tb) { tb.style.bottom = 'auto'; tb.style.top = ($('#top').getBoundingClientRect().bottom - $('#app').getBoundingClientRect().top + 6) + 'px'; } }
 window.addEventListener('resize', () => { fitMap(); placeBubble(); });
 function bubble() { fitMap(); bubble0(); placeBubble(); }
 function placeBubble() { const b = $('#bubble'); if (b.classList.contains('hidden')) return; const app = $('#app').getBoundingClientRect(), top = $('#top').getBoundingClientRect();

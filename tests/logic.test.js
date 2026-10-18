@@ -61,4 +61,6 @@ const pre = [].concat(D.RUMORS, D.GOALS.map(g => g[0]), D.TUT.map(t => t.t), Obj
 const bad = pre.filter(x => typeof x === 'string' && BAN.test(x)); ok(bad.length === 0, 'M2/#31 1막 문자열에 금지어 0건 ' + bad.join(','));
 S = fresh(); S.visited = ['a', 'b', 'c']; ok(JSON.stringify(G.goalProg(14)) === '[3,10]', 'M3 진행도 지역 3/10');
 S = fresh(); S.kills = 3; S.realm = 3; S.ev.branched = 'choosing'; G.chooseRoute(3); ok(S.goals.claimed.indexOf(0) >= 0 && S.goals.claimed.indexOf(6) >= 0, 'L6 분기 시 채운 1막 목표 자동 지급');
+
+S = fresh(); S.realm = 4; S.goals.mainIdx = 14; S.visited = Object.keys(D.REGIONS).filter(id => !G.closed(id) && G.risk(id) <= 4).slice(1); { const w = G.whereTo(); const rem = G.unvisitedOk(); ok(rem.length >= 1 && rem.every(r => w.why.indexOf(G.rname(r)) >= 0), 'N3 남은 지역 이름 표시: ' + w.why); }
 console.log(fail ? fail + ' FAILED' : 'ALL PASS'); process.exit(fail ? 1 : 0);
