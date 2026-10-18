@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#1c1917">
+<title>강호쟁패 (가제) — 1단계 프로토타입</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <div id="start" class="screen"></div>
+  <div id="main" class="screen hidden">
+    <header id="top"></header>
+    <main id="content"></main>
+    <nav id="tabs">
+      <button data-tab="map" class="on">🗺️<span>지도</span></button>
+      <button data-tab="char">🧘<span>인물</span></button>
+      <button data-tab="base">🏮<span>거점</span></button>
+    </nav>
+  </div>
+  <div id="bubble" class="hidden"></div>
+  <div id="overlay" class="hidden"></div>
+  <div id="modal" class="hidden"></div>
+  <div id="toast"></div>
+  <div id="dbg" class="hidden"></div>
+</div>
+<script src="js/data.js"></script>
+<script src="js/duel.js"></script>
+<script src="js/game.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
