@@ -8,7 +8,7 @@ button:disabled{opacity:.45}
 button.pri{background:#b45309;color:#fff;font-weight:700}
 button.red{background:#991b1b}
 button.ghost{background:transparent;border:1px solid #57534e}
-button.sm{min-height:34px;padding:4px 8px;font-size:13px}
+button.sm{min-height:44px;padding:4px 8px;font-size:13px}
 .big{min-height:52px;font-size:17px;width:100%}
 #start{justify-content:center;align-items:center;padding:24px;gap:12px;text-align:center;background:radial-gradient(circle at 50% 30%,#44260f,#0c0a09)}
 #start h1{font-size:30px;margin:0;letter-spacing:4px}
@@ -22,14 +22,18 @@ button.sm{min-height:34px;padding:4px 8px;font-size:13px}
 .statrow{display:flex;gap:8px;align-items:center;font-size:13px;color:#e7e5e4;margin-top:2px}
 .statrow .acts{letter-spacing:2px;color:#fbbf24;font-size:15px}
 .statrow .sp{flex:1}
-.icon{min-height:34px;min-width:34px;padding:2px 6px;background:#3f3a36}
+.icon{min-height:44px;min-width:44px;padding:2px 6px;background:#3f3a36}
 #content{flex:1;overflow-y:auto;overflow-x:hidden;position:relative}
 #tabs{display:flex;flex:none;background:#292524;border-top:1px solid #44403c}
 #tabs button{flex:1;border-radius:0;background:transparent;display:flex;flex-direction:column;align-items:center;font-size:18px;min-height:52px;padding:4px}
 #tabs button span{font-size:12px}
 #tabs button.on{background:#44403c;color:#fbbf24}
 .mapwrap{position:relative;background:#2a2622}
-svg.map{width:100%;height:38vh;min-height:250px;max-height:340px;display:block}
+svg.map{width:100%;height:52vh;min-height:300px;max-height:540px;display:block;touch-action:manipulation}
+.selbar{display:flex;align-items:center;gap:8px;padding:4px 8px;background:#3f2a12;border-top:1px solid #b45309;font-size:14px}
+.selbar b{flex:1}
+.nbs{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.nbs button{min-height:44px;font-size:14px}
 .rumor{font-size:12px;color:#d6d3d1;padding:4px 8px;background:#1f1b18;border-top:1px solid #3f3a36;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card{margin:6px 8px;padding:8px 10px;background:#292524;border-radius:12px;border:1px solid #44403c}
 .card h3{margin:0 0 4px;font-size:16px;display:flex;gap:6px;align-items:center}
@@ -49,10 +53,10 @@ svg.map{width:100%;height:38vh;min-height:250px;max-height:340px;display:block}
 .node{cursor:pointer}
 .flash{animation:flash .5s 8 alternate}
 @keyframes flash{to{opacity:.2}}
-#bubble{position:absolute;left:8px;right:8px;top:118px;z-index:20;background:#fef3c7;color:#292524;border-radius:14px;padding:10px 12px;box-shadow:0 4px 16px #0008;font-size:14px;line-height:1.4}
+#bubble{position:absolute;left:8px;right:8px;top:118px;opacity:.96;z-index:20;background:#fef3c7;color:#292524;border-radius:14px;padding:10px 12px;box-shadow:0 4px 16px #0008;font-size:14px;line-height:1.4}
 #bubble .who{font-weight:700;color:#92400e}
 #bubble .bb{display:flex;gap:6px;justify-content:flex-end;margin-top:6px}
-#bubble button{background:#e7e5e4;color:#292524;min-height:34px;font-size:13px}
+#bubble button{background:#e7e5e4;color:#292524;min-height:44px;font-size:13px}
 #overlay{position:absolute;inset:0;z-index:40;background:#0c0a09f2;display:flex;flex-direction:column;padding:10px;overflow:auto}
 #modal{position:absolute;inset:0;z-index:60;background:#000a;display:flex;align-items:flex-end}
 .sheet{width:100%;background:#292524;border-radius:18px 18px 0 0;padding:14px 14px 18px;max-height:88%;overflow:auto;border-top:2px solid #b45309}
@@ -83,7 +87,7 @@ svg.map{width:100%;height:38vh;min-height:250px;max-height:340px;display:block}
 .pt.open{background:#d97706}
 .pt.hit{background:#22c55e}
 .tabs2{display:flex;gap:4px;padding:6px 8px}
-.tabs2 button{flex:1;min-height:38px;font-size:14px}
+.tabs2 button{flex:1;min-height:44px;font-size:14px}
 .tabs2 button.on{background:#b45309}
 .list .card .row{font-size:14px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:14px}

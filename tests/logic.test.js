@@ -48,4 +48,17 @@ ok(Math.abs(tot - 6.4) < 0.15, '#28 그릇: 4+4+15.5시간 → 유효 합계 ' +
 S.timeShift -= 3600000 * 2; let r = G.processOffline(); ok(r.rollback === true, '#21 시계 되돌림 → 0');
 S.off.lastSeen = G.clock() + 86400000; S.off.maxSeen = S.off.lastSeen; r = G.processOffline(); ok(r.rollback === true, '#21 미래 저장 시각 → 0');
 S = fresh(); S.xp = 99; S.realm = 1; S.off.bucket = 6.4; S.off.acted = true; S.timeShift += 14 * 3600000; r = G.processOffline(); ok(S.xp === 99 && S.off.reserve > 0 && !G.canBreak(), '#18 폐관만으로 돌파 불가(필요치−1, 잔여 기운 ' + Math.round(S.off.reserve) + ')');
+
+// 플레이테스트 수정 (H1·M2·M3·L6)
+S = fresh(); S.tut.personal.skipped = false; S.tut.personal.step = 0; S.kills = 1; S.realm = 2; S.bossesKilled.guizhou = 1; S.explores = 1; S.questsDone = 1; S.turn = 3; S.xp = 330;
+ok(G.tutCurrent().id === 'T6', 'H1 3턴 T6 표시');
+S.tatongs = 1; S.realm = 3; S.mer = 2; ok(G.tutCurrent() === null || G.tutCurrent().id !== 'T6', 'H1 경맥 화면 없이 타통(팝업 기본 버튼) → T6·T7 완료');
+S.turn = 4; ok(G.tutCurrent() && G.tutCurrent().id === 'T8', 'H1 4턴 T8(이동) 표시');
+S.turn = 4; G.tutCurrent(); S.turn = 7; const tc = G.tutCurrent(); ok(!tc || tc.id !== 'T8', 'H1 어느 단계도 3턴 넘게 고착되지 않음 (현재 ' + (tc && tc.id) + ')');
+S.turn = 30; ok(G.tutCurrent() === null, 'H1 끝까지 진행 → 말풍선 없음');
+const BAN = /문파|모집|영토|거래|무주지|세력/;
+const pre = [].concat(D.RUMORS, D.GOALS.map(g => g[0]), D.TUT.map(t => t.t), Object.values(D.LOCAL).flat(), Object.values(D.MYEONGMUL).map(m => m.desc), D.SHOP.map(x => x.desc), Object.values(D.CLOSED));
+const bad = pre.filter(x => typeof x === 'string' && BAN.test(x)); ok(bad.length === 0, 'M2/#31 1막 문자열에 금지어 0건 ' + bad.join(','));
+S = fresh(); S.visited = ['a', 'b', 'c']; ok(JSON.stringify(G.goalProg(14)) === '[3,10]', 'M3 진행도 지역 3/10');
+S = fresh(); S.kills = 3; S.realm = 3; S.ev.branched = 'choosing'; G.chooseRoute(3); ok(S.goals.claimed.indexOf(0) >= 0 && S.goals.claimed.indexOf(6) >= 0, 'L6 분기 시 채운 1막 목표 자동 지급');
 console.log(fail ? fail + ' FAILED' : 'ALL PASS'); process.exit(fail ? 1 : 0);

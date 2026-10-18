@@ -75,6 +75,8 @@ async function enterGame(isNew) {
   refresh(); drain();
 }
 // ---------- 상단 바 ----------
+const progTxt = i => { const p = G.goalProg(i); return p ? ' (' + Math.min(p[0], p[1]) + '/' + p[1] + ')' : ''; };
+const todoHint = () => { const w = G.whereTo(); return w.ids.length && w.why ? ' → ' + (w.why.indexOf('길') >= 0 || w.why.indexOf('땅') >= 0 || w.why.indexOf('객잔') >= 0 ? w.why : w.ids.map(G.rname).join('·')) : ''; };
 function topHTML() {
   const s = S(); let h = '';
   const P = s.tut.path;
@@ -84,11 +86,11 @@ function topHTML() {
   else {
     const lines = G.goalLines(), cl = G.claimable();
     lines.forEach((i, k) => { const ok = G.goalCond(i); const sub = k > 0 && !D.GOALS[i][2];
-      h += '<div class="goal ' + (sub ? 'sub ' : '') + (ok ? 'ok' : '') + '"><span class="gt">' + (k === 0 ? '🎯 ' : '· ') + esc(D.GOALS[i][0]) + '<span class="muted">' + esc(G.giveText(D.GOALS[i][1])) + '</span></span>' +
+      h += '<div class="goal ' + (sub ? 'sub ' : '') + (ok ? 'ok' : '') + '"><span class="gt">' + (k === 0 ? '🎯 ' : '· ') + esc(D.GOALS[i][0]) + '<b style="color:#fbbf24">' + progTxt(i) + '</b><span class="muted">' + esc(G.giveText(D.GOALS[i][1])) + '</span></span>' +
         (k === 0 ? '<button class="sm ' + (cl.length ? 'pri glow' : '') + '" id="claim" ' + (cl.length ? '' : 'disabled') + '>받기' + (cl.length > 1 ? ' ' + cl.length : '') + '</button><button class="sm icon' + (s.todo ? ' glow' : '') + '" id="where" title="어디로?">➜</button>' : '') + '</div>'; });
     if (!lines.length) h += '<div class="goal"><span class="gt">🎯 1막 목표를 모두 마쳤다</span></div>';
   }
-  if (s.todo && !s.route) h += '<div class="goal sub" style="color:#fbbf24;font-weight:700" id="todo"><span class="gt">👉 지금 할 일: ' + esc(s.goals.mainIdx >= 0 && D.GOALS[s.goals.mainIdx] ? D.GOALS[s.goals.mainIdx][0] : G.nowTodo()) + '</span></div>';
+  if (s.todo && !s.route) h += '<div class="goal sub" style="color:#fbbf24;font-weight:700" id="todo"><span class="gt">👉 지금 할 일: ' + esc((s.goals.mainIdx >= 0 && D.GOALS[s.goals.mainIdx] ? D.GOALS[s.goals.mainIdx][0] + progTxt(s.goals.mainIdx) : G.nowTodo()) + todoHint()) + '</span></div>';
   const lk = G.breakLock();
   if (lk && !G.tatongSpot(s.loc) && s.route !== 3) h += '<div class="goal sub"><span class="gt">⚠ 타통하려면 객잔이나 산으로</span></div>';
   h += '<div class="statrow"><span>' + G.dateStr() + ' (' + s.turn + '턴)</span><span class="acts">' + '●'.repeat(Math.max(0, s.acts)) + '<span style="color:#57534e">' + '●'.repeat(3 - Math.max(0, s.acts)) + '</span></span><span>💰' + s.silver + '</span><span class="sp"></span>' +
@@ -112,14 +114,14 @@ function mapSVG() {
     if (reveal && s.ev.branched !== false && s.revealMap) fill = D.FACTION_COLOR[s.owners[id][1]] || fill;
     const adj = mt[id], fl = UI.flash.indexOf(id) >= 0;
     h += '<g class="node' + (fl ? ' flash' : '') + '" data-id="' + id + '">';
-    if (adj) h += '<circle cx="' + x + '" cy="' + y + '" r="21" fill="#fbbf2433" stroke="#fbbf24" stroke-width="1.5"/>';
-    if (UI.sel === id) h += '<circle cx="' + x + '" cy="' + y + '" r="23" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="4 3"/>';
-    h += '<circle cx="' + x + '" cy="' + y + '" r="15" fill="' + fill + '" stroke="' + (cl ? '#71717a' : ring) + '" stroke-width="3"/>';
-    h += '<text x="' + x + '" y="' + (y + 5) + '" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">' + (cl ? '🔒' : r) + '</text>';
-    h += '<text x="' + x + '" y="' + (y + 28) + '" text-anchor="middle" font-size="11" fill="#e7e5e4">' + G.rname(id) + '</text>';
+    if (adj) h += '<circle cx="' + x + '" cy="' + y + '" r="24" fill="#fbbf2433" stroke="#fbbf24" stroke-width="2"/>';
+    if (UI.sel === id) h += '<circle cx="' + x + '" cy="' + y + '" r="27" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="5 3"/>';
+    h += '<circle cx="' + x + '" cy="' + y + '" r="18" fill="' + fill + '" stroke="' + (cl ? '#71717a' : ring) + '" stroke-width="3.5"/>';
+    h += '<text x="' + x + '" y="' + (y + 6) + '" text-anchor="middle" font-size="17" font-weight="700" fill="#fff">' + (cl ? '🔒' : r) + '</text>';
+    h += '<text x="' + x + '" y="' + (y + 37) + '" text-anchor="middle" font-size="18" font-weight="600" fill="#f5f5f4" stroke="#1c1917" stroke-width="3" paint-order="stroke">' + G.rname(id) + '</text>';
     if ((s.chaos[id] || 0) >= s.turn && s.visited.indexOf(id) >= 0) h += '<text x="' + (x + 13) + '" y="' + (y - 9) + '" font-size="11">🔥</text>';
     if (id === s.loc) h += '<text x="' + (x - 7) + '" y="' + (y - 14) + '" font-size="16">🗡️</text>';
-    h += '<circle cx="' + x + '" cy="' + y + '" r="24" fill="transparent"/></g>';
+    h += '<circle cx="' + x + '" cy="' + y + '" r="33" fill="transparent"/></g>';
   }
   return h + '</svg>';
 }
@@ -130,17 +132,22 @@ function regionCard(id) {
   if (cl) return h + '<div class="row">🔒 ' + D.CLOSED[id] + ' (25턴부터)</div></div>';
   const e = G.enemyOf(id), we = G.predict(e, 'enemy', id).w, sm = G.sweepMul(id), k = s.sweep[id] || 0;
   h += '<div class="row"><span class="f">⚔ ' + D.LOCAL[id][0] + ' <span class="muted">' + D.LOCAL[id][2] + '</span></span>' + bandBadge(we) + '</div>';
-  h += '<div class="row"><span class="muted">소탕도</span><div class="bar"><i style="width:' + Math.max(0, 100 - k * 33) + '%;background:' + (k ? '#78716c' : '#22c55e') + '"></i></div>' + (sm < 1 ? '<span class="muted">보상 ×' + sm + '</span>' : '') + '</div>';
+  h += '<div class="row"><span class="muted">소탕도</span><div class="bar"><i style="width:' + Math.max(0, 100 - k * 33) + '%;background:' + (k ? '#78716c' : '#22c55e') + '"></i></div>' + (k ? '<span class="muted">소탕도 ×' + (k <= 2 ? 0.5 : 0.25) + '</span>' : '') + '</div>';
   if (k >= 1) h += '<div class="muted">이 고을 졸개들은 몸을 사린다</div>';
+  { const dd = s.realm - G.risk(id); if (dd >= 1) h += '<div class="muted">경지 차 감쇠: 출몰 적 보상 ×' + (dd === 1 ? 0.5 : 0.25) + '</div>'; }
+  if (id === 'yunnan' && !s.explored.yunnan && s.turn >= 2) h += '<div class="muted">은거 고수: 개인 위신 300 필요 (현재 ' + G.pres() + ')</div>';
   if (G.bossAlive(id)) { const wb = G.predict(G.bossOf(id), 'boss', id).w; h += '<div class="row"><span class="f">👹 ' + D.LOCAL[id][1] + ' (' + D.REALM[G.bossOf(id)[0]] + ')' + (s.resp[id] ? ' <span class="badge b-r">재등장</span>' : '') + ((s.bossLoss[id] || 0) ? ' <span class="muted">지난 싸움의 상처가 남았다</span>' : '') + '</span>' + bandBadge(wb) + '</div>'; }
   else h += '<div class="row muted">👹 ' + D.LOCAL[id][1] + ' — 처치함 (' + (6 - (s.turn - s.dead[id])) + '턴 뒤 재등장)</div>';
-  if (!here) { const mt = G.moveTargets(); h += '<button class="big ' + (mt[id] ? 'pri' : '') + '" id="goBtn" ' + (mt[id] && (s.acts > 0 || s.off.steps > 0) ? '' : 'disabled') + '>' + (mt[id] ? '이동 (' + mt[id] + '칸)' : '인접 지역이 아니다') + '</button>'; }
+  if (here) { const mt = G.moveTargets(); h += '<div class="muted" style="margin-top:4px">갈 수 있는 곳 (눌러서 선택)</div><div class="nbs">' + Object.keys(mt).map(n => '<button data-nb="' + n + '"><span class="badge b-' + (G.risk(n) <= s.realm ? 'g' : G.risk(n) === s.realm + 1 ? 'o' : 'r') + '">' + G.risk(n) + '</span> ' + G.rname(n) + (s.visited.indexOf(n) < 0 ? ' ·새' : '') + '</button>').join('') + '</div>'; }
   return h + '</div>';
 }
 function mapTab() {
   const s = S(), sel = UI.sel || s.loc;
-  let h = '<div class="mapwrap">' + mapSVG() + '</div><div class="rumor">📜 ' + esc(s.rumor) + '</div>';
-  h += regionCard(sel);
+  let h = '<div class="mapwrap">' + mapSVG() + '</div>';
+  if (UI.sel && UI.sel !== s.loc) { const mt = G.moveTargets(), id = UI.sel;
+    h += '<div class="selbar"><b>' + G.rname(id) + ' · 위험도 ' + G.risk(id) + (G.closed(id) ? ' 🔒' : '') + '</b><button class="sm ' + (mt[id] ? 'pri' : '') + '" id="goBtn" ' + (mt[id] && (s.acts > 0 || s.off.steps > 0) ? '' : 'disabled') + '>' + (mt[id] ? '이동 (' + mt[id] + '칸)' : '인접 아님') + '</button><button class="sm" id="selX">✕</button></div>'; }
+  else h += '<div class="rumor">📜 ' + esc(s.rumor) + '</div>';
+  const cardHTML = regionCard(sel);
   const glow = G.tatongGlow() && s.turn <= 24;
   const B = (id, label, why, cls) => '<button id="' + id + '" class="' + (cls || '') + '" ' + (why ? 'disabled' : '') + '>' + label + '<small>' + (why ? esc(why) : '&nbsp;') + '</small></button>';
   const tb = G.tatongBlock();
@@ -154,7 +161,7 @@ function mapTab() {
   else if (lk) h += '<button class="big" id="aLock">🔒 돌파 잠김 · ' + esc(lk) + '</button>';
   if (s.route === 3) h += '<button class="big" id="myPath">🧭 나의 길</button>';
   if (s.injured && s.items['금창약']) h += '<button class="big" id="useGeum">금창약 사용</button>';
-  h += '</div><div style="height:8px"></div>';
+  h += '</div>' + cardHTML + '<div style="height:8px"></div>';
   return h;
 }
 // ---------- 인물 ----------
@@ -241,7 +248,8 @@ function bind() {
   on('where', whereTo);
   on('rest', restSheet); on('help', helpCards); on('set', settings);
   document.querySelectorAll('.node').forEach(n => n.onclick = () => { UI.sel = n.dataset.id; if (UI.sel === s.loc) UI.sel = null; refresh(); });
-  on('goBtn', () => doMove(UI.sel));
+  on('goBtn', () => doMove(UI.sel)); on('selX', () => { UI.sel = null; refresh(); });
+  document.querySelectorAll('[data-nb]').forEach(b => b.onclick = () => { UI.sel = b.dataset.nb; refresh(); document.getElementById('content').scrollTop = 0; });
   on('aTrain', () => { G.train(); afterAct(); });
   on('aFight', fightSheet);
   on('aExplore', () => { G.explore(); afterAct(); });
@@ -294,6 +302,7 @@ function duelUI(e, opts, cfg) {
   cfg = cfg || {}; const s = S();
   return new Promise(resolve => {
     const d = new DuelLib.Duel(G.me(), e.slice(0, 7), Object.assign({}, opts, { window: cfg.window || 1.2 }), G.rand);
+    if (d.auto !== null) { G.toast((d.auto ? '압도: ' : '역부족: ') + (e[7] || '상대') + ' (경지 차 2 이상, 자동 판정)'); s.lastDuel = { nm: e[7], win: d.auto, t: 1, gise: 0, ok: 0, log: ['경지 차 자동 판정'] }; flushToasts(); return resolve(d.auto); }
     const ov = $('#overlay'); ov.classList.remove('hidden');
     const nm = e[7] || '상대';
     ov.innerHTML = '<div class="duel"><div class="fighter"><div class="nm"><b>' + esc(nm) + '</b><span>' + D.REALM[e[0]] + ' · ' + (e[5] ? '특기 ' + e[5] : '') + (e[6] === 'm' ? ' · 운기 1' : '') + (e[6] === 'b' ? ' · 두목' : '') + '</span></div><div class="hp"><i id="ehp"></i></div><div class="gise"><i id="gbar"></i></div><div class="muted" id="gtxt">기세 게이지</div></div>' +
@@ -441,7 +450,7 @@ function goRest(type, tat) {
 async function outUI(r) {
   const s = S();
   if (r.pendingTat) { const t = r.pendingTat; await modal({ title: '타통 결과', text: '개통: ' + t.opened.join(', ') + '\n수련치 +' + t.xp + '\n' + (G.canBreak() ? '돌파할 수 있다!' : '') + '\n\n한 달 사이 강호에서는…\n· ' + t.rumors.join('\n· ') }); }
-  if (r.rollback) { await modal({ title: '출관', text: '기가 흐트러졌다. (시각이 되돌려져 이번 폐관은 0으로 처리했다)' }); G.queue.push(...[]); return; }
+  if (r.rollback) { await modal({ title: '출관', text: r.future ? '기가 흐트러졌다. (저장 시각이 지금보다 앞서 있어 이번 폐관은 0으로 처리했다)' : '기가 흐트러졌다. (시각이 되돌려져 이번 폐관은 0으로 처리했다)' }); G.queue.push(...[]); return; }
   if (r.h < 1 / 6) { G.toast('잠깐 숨을 골랐다' + (r.put > 0.5 ? ' (수련치 +' + Math.round(r.put) + ')' : '')); flushToasts(); return; }
   const hh = Math.floor(r.totH), mm = Math.floor((r.totH - hh) * 60);
   const seg = Math.min(10, r.totH);
@@ -489,7 +498,17 @@ async function routeCards(again) {
   G.claim(); refresh();
 }
 // ---------- 말풍선(튜토리얼) ----------
-function bubble() {
+function fitMap() { const svg = document.querySelector('svg.map'), grid = document.querySelector('.acts-grid'); if (!svg || !grid) return;
+  const top = $('#top').getBoundingClientRect().height, tabs = $('#tabs').getBoundingClientRect().height, sel = (document.querySelector('.selbar') || document.querySelector('.rumor') || { offsetHeight: 0 }).offsetHeight;
+  const avail = window.innerHeight - top - tabs - sel - grid.offsetHeight - 14; svg.style.height = Math.max(260, Math.min(540, avail)) + 'px'; }
+window.addEventListener('resize', () => { fitMap(); placeBubble(); });
+function bubble() { fitMap(); bubble0(); placeBubble(); }
+function placeBubble() { const b = $('#bubble'); if (b.classList.contains('hidden')) return; const app = $('#app').getBoundingClientRect(), top = $('#top').getBoundingClientRect();
+  const tid = (b.querySelector('.who') || {}).textContent || ''; const grid = document.querySelector('.acts-grid');
+  let y; if (/T8|R1/.test(tid) || !grid) y = top.bottom - app.top + 6; // 지도 노드가 대상이면 상단 바 바로 아래
+  else { const g = grid.getBoundingClientRect(); y = g.top - app.top - b.offsetHeight - 6; if (y < top.bottom - app.top + 4) y = top.bottom - app.top + 4; }
+  b.style.top = y + 'px'; }
+function bubble0() {
   const s = S(), b = $('#bubble');
   if (UI.replay) { const st = UI.replay.list[UI.replay.i]; b.classList.remove('hidden');
     b.innerHTML = '<div class="who">취팔 노개 <span class="muted">(다시 보기 ' + (UI.replay.i + 1) + '/' + UI.replay.list.length + ')</span></div>' + esc(st.t) + '<div class="bb"><button id="rpN">다음</button><button id="rpX">닫기</button></div>';

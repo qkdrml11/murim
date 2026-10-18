@@ -438,6 +438,8 @@ G.goalCond = function (i) {
   }
   return false;
 };
+G.goalProg = function (i) { const S = G.S, w = Object.keys(S.bossesKilled).length;
+  return { 10: [S.mer, 4], 11: [w, 5], 12: [S.mer, 8], 14: [S.visited.length, 10], 15: [S.mer, 12], 18: [w, 10], 19: [S.ev.omen, 2] }[i] || null; };
 G.goalLines = function () {
   const S = G.S, cl = S.goals.claimed; let m = -1;
   for (let i = 0; i < D.GOALS.length; i++) if (cl.indexOf(i) < 0 && !D.GOALS[i][2]) { m = i; break; }
@@ -475,6 +477,8 @@ G.whereTo = function () {
   const lock = G.breakLock();
   if (lock && !G.tatongSpot(S.loc)) { for (const a of adj) if (G.tatongSpot(a)) out.add(a); if (out.size) return { ids: [...out], why: '타통하려면 객잔이나 산으로' }; }
   const m = S.goals.mainIdx;
+  if (m === 14) { const un = adj.filter(a => S.visited.indexOf(a) < 0 && G.risk(a) <= S.realm); if (un.length) return { ids: un, why: '아직 밟지 않은 땅' };
+    const st = G.bfsFirstStep(id => S.visited.indexOf(id) < 0 && G.risk(id) <= S.realm); if (st) return { ids: [st.step], why: '미방문 ' + G.rname(st.goal) + '(으)로 가는 길' }; }
   for (const a of adj) {
     if (S.visited.indexOf(a) < 0 && G.risk(a) <= S.realm + 1) out.add(a);
     if (G.bossAlive(a) && G.risk(a) <= S.realm) { const w = G.predict(G.bossOf(a), 'boss', a).w; if (w >= 0.6) out.add(a); }
@@ -565,8 +569,13 @@ G.settlement = function () {
   const tot = p + r + ti + to + wa + rv; const grade = tot >= 2000 ? '천하의 기재' : tot >= 1300 ? '강호의 신성' : '떠오르는 무인';
   S.settle = { p, r, ti, to, wa, rv, tot, grade }; return S.settle;
 };
+// 분기 뒤에도 채운 1막 목표 보상은 자동 지급(받을 곳이 사라지지 않게)
+G.grantRemaining = function () { const S = G.S; const t = [];
+  for (let i = 0; i < D.GOALS.length; i++) if (S.goals.claimed.indexOf(i) < 0 && G.goalCond(i)) { S.goals.claimed.push(i); G.give(D.GOALS[i][1]); t.push('✔ ' + D.GOALS[i][0] + G.giveText(D.GOALS[i][1])); }
+  if (t.length) G.toast(t.join('\n')); };
 G.chooseRoute = function (n) {
   const S = G.S; if (n !== 3) return false;
+  S.route = 3; S.ev.branched = 'ronin'; G.grantRemaining();
   S.route = 3; S.ev.branched = 'ronin'; S.tut.path = { route: 3, step: 0, skipped: false };
   // 수배첩 두목 중 3명을 재등장(현상금)
   const killed = Object.keys(S.bossesKilled);
@@ -586,20 +595,27 @@ G.skipPathTut = function () { const S = G.S, P = S.tut.path; if (!P) return; for
 // ---------- 튜토리얼 ----------
 G.tutCond = function (i) {
   const S = G.S, pt = S.tut.personal;
+  // 실제 행동으로도 넘어간다(경맥 화면을 안 봐도 타통·일류면 T6 완료)
   return [() => S.kills >= 1, () => S.realm >= 2, () => !!S.bossesKilled.guizhou, () => (S.explores || 0) >= 1, () => (S.questsDone || 0) >= 1,
-    () => pt.seen.meridian, () => (S.tatongs || 0) >= 1 && S.realm >= 3, () => S.visited.length >= 2, () => pt.seen.wanted, () => S.off.chosen][i]();
+    () => pt.seen.meridian || (S.tatongs || 0) >= 1 || S.realm >= 3, () => (S.tatongs || 0) >= 1 && S.realm >= 3, () => S.visited.length >= 2, () => pt.seen.wanted || Object.keys(S.bossesKilled).length >= 2, () => S.off.chosen][i]();
 };
 G.tutUnlock = i => [1, 1, 1, 2, 2, 2, 3, 4, 4, 1][i];
+// 고착 방지: ① 조건을 채운 단계는 순서와 상관없이 완료 ② 해금 뒤 3턴이 지나면 그 단계는 자동으로 넘어감
+G.TUT_STALL = 3;
 G.tutCurrent = function () { const S = G.S, pt = S.tut.personal; if (pt.skipped) return null;
-  while (pt.step < 9 && G.tutCond(pt.step)) pt.step++;
-  if (pt.step >= 9) return null; if (S.turn < G.tutUnlock(pt.step)) return null;
-  if (pt.step === 5 && !(S.xp >= 300 || S.turn >= 3)) return null; // 경맥은 막혔을 때
-  return D.TUT[pt.step]; };
+  pt.done = pt.done || {}; pt.shown = pt.shown || {};
+  for (let i = 0; i < 9; i++) if (!pt.done[i] && G.tutCond(i)) pt.done[i] = 1;
+  for (let i = 0; i < 9; i++) { if (pt.done[i]) continue; if (S.turn < G.tutUnlock(i)) return null;
+    if (i === 5 && !(S.xp >= 300 || S.turn >= 3)) return null; // 경맥은 막혔을 때
+    if (pt.shown[i] === undefined) pt.shown[i] = S.turn;
+    if (S.turn - pt.shown[i] >= G.TUT_STALL) { pt.done[i] = 'timeout'; continue; }
+    pt.step = i; return D.TUT[i]; }
+  pt.step = 9; return null; };
 G.skipTutorial = function (silent) { const S = G.S, pt = S.tut.personal; pt.skipped = true;
   if (!pt.t10) { pt.t10 = true; S.items['금창약']++; } if (!silent) G.toast('튜토리얼 건너뛰기: 남은 보상 일괄 지급(목표 바 보상은 목표 바에서). 금창약 +1'); G.save(); };
 G.t10Done = function () { const S = G.S, pt = S.tut.personal; if (!pt.t10) { pt.t10 = true; S.items['금창약']++; G.toast('튜토리얼 T10 완료: 금창약 +1'); } };
 // 공통 사후 처리
-G.after = function () { const S = G.S; G.pathTutCheck(); G.save(); };
+G.after = function () { const S = G.S; if (S.route) G.grantRemaining(); G.pathTutCheck(); G.save(); };
 
 // ---------- 실시간 폐관 (2-23, F14) ----------
 G.E0 = h => Math.min(h, 2) + 0.7 * Math.max(0, Math.min(h, 6) - 2) + 0.4 * Math.max(0, Math.min(h, 10) - 6);
@@ -611,7 +627,7 @@ G.processOffline = function () {
   const res = { now, type: O.type, pendingTat: O.pendingTat };
   O.pendingTat = null; O.resting = false;
   if (now < O.maxSeen - 5000 || O.lastSeen > now + 5000) { // 시계 되돌림 / 미래 저장 시각
-    res.rollback = true; O.lastSeen = now; O.maxSeen = now; O.bucketTs = now; O.sessH = 0; O.sessE = 0; O.acted = true; G.save(); return res;
+    res.rollback = true; res.future = O.lastSeen > now + 5000; O.lastSeen = now; O.maxSeen = now; O.bucketTs = now; O.sessH = 0; O.sessE = 0; O.acted = true; G.save(); return res;
   }
   const h = Math.max(0, (now - O.lastSeen) / 3600000); res.h = h;
   // 그릇: 실제 경과(접속 중 포함) 만큼 채움
@@ -652,7 +668,8 @@ G.startRest = function (type, withTat) {
 };
 G.endTurnSilent = function () { G.endTurn(); };
 G.nowTodo = function () {
-  const S = G.S; if (S.warm) return '온양 상태다. 이번 달 타통은 무료.';
+  const S = G.S; if (S.warm) return S.turn < 3 ? '온양 상태(3턴부터 타통 무료).' : '온양 상태다. 이번 달 타통은 무료.';
+  if (S.turn >= 3 && G.breakLock() && G.tatongCost() > S.silver) return '타통 은자가 모자란다(' + G.tatongCost() + '). 두목·의뢰로 은자를 벌자.';
   const lk = G.breakLock(); if (lk) return G.tatongSpot(S.loc) ? '경맥이 막혔다. 이번 달은 타통하라.' : '타통하려면 객잔이나 산으로.';
   if (G.canBreak()) return '돌파할 수 있다!';
   const m = S.goals.mainIdx; return m >= 0 && D.GOALS[m] ? '목표: ' + D.GOALS[m][0] : '강호로 나가자.';
