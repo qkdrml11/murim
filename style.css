@@ -136,3 +136,62 @@ svg.map{touch-action:none}
 body.narrow button{min-height:50px}
 body.narrow .icon,body.narrow .zctl button,body.narrow #narrow button{min-width:50px}
 body.narrow button.sm{min-width:50px}body.narrow #narrow button{min-height:50px}
+/* v0.7.8 일기토 배치 (§4-1 ②③) */
+.duel .sm1{font-size:11px}
+.duel.f20{gap:5px}
+.duel .fighter.top{padding:6px 10px}
+.duel .fighter.top .hp{height:10px;margin-top:3px}
+.duel .fighter.bot{padding:5px 10px}
+.stage,.duel .arena{flex:1 1 auto;min-height:120px;position:relative;display:flex;align-items:center;justify-content:space-around;font-size:40px;overflow:hidden;border-radius:12px;background:#1c1917}
+.duel.f20 .stage{min-height:110px}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.stage .who{width:72px;height:96px;display:flex;align-items:center;justify-content:center}
+.stage.flash{box-shadow:inset 0 0 0 3px #fde68a}
+.dmg.big{font-weight:900}
+.duel .dlog{height:30px;font-size:11px}
+.qi{position:relative;height:4px;background:#1e293b;border-radius:2px;margin-top:4px;overflow:visible}
+.qi>i{display:block;height:100%;background:#4aa3ff;border-radius:2px;transition:width .3s}
+.qi>b{position:absolute;top:-1px;height:6px;border:1px dashed #fde68a;border-width:1px 0;box-sizing:border-box}
+.qi>s{position:absolute;top:-2px;width:1px;height:8px;background:#94a3b8;text-decoration:none}
+.qi.shk{animation:qshk .15s 2}
+@keyframes qshk{50%{transform:translateX(3px)}}
+.hotrow{display:flex;gap:6px;height:64px;flex:0 0 64px}
+.hotrow.empty{height:0;flex-basis:0}
+.hk{flex:0 0 calc((100% - 18px)/4);height:64px;min-width:48px;position:relative;border-radius:12px;background:#292524;border:2px solid #44403c;color:#e7e5e4;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;font-size:13px;overflow:hidden}
+.hk .ic{font-size:14px;color:var(--tc)}
+.hk .hn{font-weight:700}
+.hk .qc{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;border:2px solid var(--tc);font-size:9px;line-height:14px;text-align:center;background:#0c0a09}
+.hk .lk{position:absolute;top:2px;left:3px;font-size:11px}
+.hk .st{font-size:9px;color:#a8a29e;line-height:1}
+.hk .hs{position:absolute;bottom:2px;left:0;right:0;font-size:12px;color:#f87171;font-weight:700;text-align:center;pointer-events:none}
+.hk .cdr{position:absolute;inset:0;pointer-events:none;border-radius:10px}
+.hk.cd{filter:grayscale(.7);opacity:.75}
+.hk.low{opacity:.4;filter:grayscale(1)}
+.hk.low .qc{border-color:#ef4444;color:#ef4444}
+.hk.res{border-color:#facc15;box-shadow:0 0 0 2px #facc1555}
+.hk.gs{opacity:.5}
+.hk.lockd{border-color:#ca8a04;opacity:.6}
+.hk.ping{box-shadow:0 0 10px #4aa3ff}
+.lag{height:2px;background:transparent;margin-top:-3px}
+.lag>i{display:block;height:100%;background:#78716c;transform-origin:left;transform:scaleX(0)}
+.parry.f20{min-height:88px;font-size:26px;margin-bottom:env(safe-area-inset-bottom)}
+.banner{position:absolute;left:0;right:0;top:38%;text-align:center;font-size:22px;font-weight:900;color:#fde047;text-shadow:0 2px 6px #000;pointer-events:none;animation:bn .8s forwards}
+.banner.b2{font-size:18px;color:#e9d5ff;top:20%;animation-duration:1.2s}
+@keyframes bn{0%{opacity:0;transform:scale(1.3)}15%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
+.fxfull{position:absolute;inset:0;z-index:5;background:#000c;color:#fde047;font-size:28px;font-weight:900;display:flex;align-items:center;justify-content:center}
+@media (prefers-reduced-motion: reduce){.banner,.dmg{animation-duration:.01s}.hk.ping{box-shadow:none;border-color:#4aa3ff}}
+/* 핫키 편성 시트 */
+.hksheet{height:70vh;display:flex;flex-direction:column;gap:8px}
+.hkslots{display:flex;gap:8px}
+.hkslot{width:64px;height:64px;border-radius:12px;border:2px dashed #57534e;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;position:relative;background:#1c1917;touch-action:none;user-select:none}
+.hkslot.f{border-style:solid;border-color:var(--tc)}
+.hkslot.sel{box-shadow:0 0 0 2px #fbbf24}
+.hkslot.lk{border-color:#eab308;outline:2px solid #eab308}
+.hkslot .qc{font-size:10px;color:var(--tc)}
+.hklist{flex:1;overflow:auto;display:flex;flex-direction:column;gap:4px}
+.hkc{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:10px;background:#1c1917;border:1px solid #44403c;font-size:13px;min-height:44px}
+.hkc.out{opacity:.5;filter:grayscale(1)}
+.hkc.on{border-color:#fbbf24}
+.hkc .w{height:6px;background:#a16207;border-radius:3px}
+.hkc .tq{width:22px;height:22px;border-radius:50%;border:2px solid var(--tc);font-size:10px;line-height:18px;text-align:center}
+.prevbadge{position:fixed;top:4px;right:4px;z-index:90;background:#7c3aed;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:9px;pointer-events:none}

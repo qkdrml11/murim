@@ -2,10 +2,13 @@
 'use strict';
 (function (root) {
 const D = root.D, DL = root.DuelLib;
-const SAVE_KEY = 'murim_save_v5';
-const G = {};
-G.SAVE_KEY = SAVE_KEY;
 const Q = new URLSearchParams((root.location && root.location.search) || '');
+const LOC = root.location ? String(root.location.hostname || '') + String(root.location.pathname || '') : '';
+const PREVIEW = LOC.indexOf('murim-preview') >= 0 || Q.get('preview') === '1';
+// v0.7.8 [1a] 저장 v6. 미리보기(murim-preview)는 본판(같은 github.io 출처)과 저장이 섞이지 않게 키를 따로 쓰고 v5를 읽지 않는다
+const SAVE_KEY = PREVIEW ? 'murim_preview_save_v6' : 'murim_save_v6', OLD_KEYS = PREVIEW ? [] : ['murim_save_v5'];
+const G = {};
+G.SAVE_KEY = SAVE_KEY; G.PREVIEW = PREVIEW;
 G.debug = Q.get('debug') === '1';
 G.S = null;
 // ---------- 기본 ----------
@@ -38,13 +41,17 @@ G.capStats = () => { const S = G.S; S.mu = Math.min(100, S.mu); S.ne = Math.min(
 
 // 저장 이전(v5 키 그대로): 없으면 빈 값
 G.subInit = () => ({ cur: null, base: 0, q: [], done: [], last: 0, gotTurn: 0, n: 0, silver: 0, goalsSeen: 0 });
-G.cntInit = () => ({ win: 0, train: 0, set: { nok: 0, suro: 0, hao: 0 }, adv: 0, r4: 0 });
-G.migrate = function (S) { if (!S.sub) S.sub = G.subInit(); if (!S.cnt) S.cnt = G.cntInit(); if (S.tut && S.tut.personal && !S.tut.personal.used) S.tut.personal.used = {}; };
+G.cntInit = () => ({ win: 0, train: 0, set: { nok: 0, suro: 0, hao: 0 }, adv: 0, r4: 0, duel: 0 });
+G.optDefault = function () { let rm = false; try { rm = !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) {}
+  return rm ? { shake: false, fx: '낮음', flash: true, vib: false } : { shake: true, fx: '보통', flash: false, vib: false }; };
+G.migrate = function (S) { if (!S.sub) S.sub = G.subInit(); if (!S.cnt) S.cnt = G.cntInit(); if (S.cnt.duel == null) S.cnt.duel = 0; if (S.tut && S.tut.personal && !S.tut.personal.used) S.tut.personal.used = {};
+  if (!S.opt) S.opt = G.optDefault(); if (!S.fxSeen) S.fxSeen = []; if (!S.skUse) S.skUse = {};
+  if (G.mgMigrate) G.mgMigrate(S); };
 G.newGame = function (name, skipTut) {
   const now = Date.now();
   const seed = parseInt(Q.get('seed')) || (now % 100000);
   G.S = {
-    v: 5, name: name || '한무결', seed, ra: seed, turn: 1, acts: 3, silver: 100, xp: 40, realm: 1, mu: 55, ne: 50, ji: 60, grade: 0, gsk: 0,
+    v: 6, name: name || '한무결', seed, ra: seed, turn: 1, acts: 3, silver: 100, xp: 40, realm: 1, mu: 55, ne: 50, ji: 60, grade: 0, gsk: 0,
     fame: 0, mer: 0, imdok: false, loc: 'guizhou', visited: ['guizhou'], explored: {}, injured: false,
     dead: {}, resp: {}, bossesKilled: {}, bossLoss: {}, bossRevenge: 0, lostBossOnce: {}, kills: 0, sweep: {}, quests: [], board: null,
     items: { '금창약': 0, '소환단': 0 }, onceBuy: {}, turnBuy: {}, titles: [], equipped: null, hyeop: 0, ak: 0, parryHist: [],
@@ -67,7 +74,10 @@ G.newGame = function (name, skipTut) {
   return G.S;
 };
 G.save = function () { if (!G.S) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.S)); } catch (e) {} };
-G.load = function () { try { const s = localStorage.getItem(SAVE_KEY); if (!s) return null; const S = JSON.parse(s); if (S.v !== 5) return null; G.S = S; G.migrate(S); return S; } catch (e) { return null; } };
+G.load = function () { try { let s = localStorage.getItem(SAVE_KEY); for (let i = 0; !s && i < OLD_KEYS.length; i++) s = localStorage.getItem(OLD_KEYS[i]); if (!s) return null;
+  const S = JSON.parse(s); if (S.v !== 5 && S.v !== 6) return null; G.S = S;
+  if (S.v === 5) { if (G.mgUpgrade5) G.mgUpgrade5(S); S.v = 6; } // v5 → v6 변환이 끝난 뒤 migrate(핫키 기본 편성은 그 안에서)
+  G.migrate(S); return S; } catch (e) { return null; } };
 G.fillBucket = function () { const O = G.S.off, n = G.clock(); const bh = Math.max(0, (n - O.bucketTs) / 3600000); O.bucket = Math.min(6.4, O.bucket + 6.4 * bh / 24); O.bucketTs = Math.max(O.bucketTs, n); };
 G.heartbeat = function () { const S = G.S; if (!S || S.off.resting) return; const n = G.clock(); G.fillBucket(); S.off.lastSeen = n; S.off.maxSeen = Math.max(S.off.maxSeen, n); G.save(); };
 
@@ -274,17 +284,17 @@ G.chooseKiyeon = function (nm, id, b) {
   const S = G.S;
   switch (nm) {
     case '영약': S.yak++; if (b && S.mer < 12 && G.jungOk()) G.addJung(1, '영약'); else { S.xp += 150; G.toast('수련치 +150'); } break;
-    case '유골': S.kyOnce['유골'] = 1; if (!b) { G.gup(1); G.toast('무공 등급 +1'); } else { S.fame += 20; G.hyeopUp(); } break;
-    case '떠돌이 무사': if (!b) { if (S.silver >= 30) { S.silver -= 30; S.firstAtk = true; G.toast('다음 일기토 첫 공격 +50%'); } else G.toast('은자가 모자라 대련을 못 했다'); } else { S.silver += 60; G.toast('은자 +60'); } break;
-    case '이재민': if (!b && S.silver >= 50) { S.silver -= 50; S.fame += 15; G.hyeopUp(); } else S.fame += 5; break;
+    case '유골': S.kyOnce['유골'] = 1; if (!b) { if (G.learnSkill) G.learnSkill('cmy', '기연'); else { G.gup(1); G.toast('무공 등급 +1'); } } else { S.fame += 20; G.hyeopUp(); } break;
+    case '떠돌이 무사': if (!b) { if (S.silver >= 30) { S.silver -= 30; S.firstAtk = true; G.toast('다음 일기토 첫 공격 +50%'); if (G.learnSkill) G.learnSkill('yhg', '기연'); } else G.toast('은자가 모자라 대련을 못 했다'); } else { S.silver += 60; G.toast('은자 +60'); } break;
+    case '이재민': if (!b && S.silver >= 50) { S.silver -= 50; S.fame += 15; G.hyeopUp(); if (G.learnSkill) G.learnSkill('yht', '기연'); } else S.fame += 5; break;
     case '하오문': if (!b && S.silver >= 50) { S.silver -= 50; S.haomun = true; G.toast('다음 두목전 적 체력 −20%'); } else S.fame += 20; break;
-    case '산채 도전장': if (!b) { if (S.injured) { G.toast('부상 중이라 사양했다'); break; } const tr = S.realm - 1 >= 2 ? D.TRIAL[S.realm - 1] : G.enemyOf(id); return { duel: tr.slice(0, 7).concat([S.realm - 1 >= 2 ? '산채 채주' : '산채 졸개']), reward: { fame: 20 } }; } else S.xp += 60; break;
+    case '산채 도전장': if (!b) { if (S.injured) { G.toast('부상 중이라 사양했다'); break; } const tr = S.realm - 1 >= 2 ? D.TRIAL[S.realm - 1] : G.enemyOf(id); return { duel: tr.slice(0, 7).concat([S.realm - 1 >= 2 ? '산채 채주' : '산채 졸개']), reward: { fame: 20, mg: 'yhs' } }; } else S.xp += 60; break;
     case '깨달음': S.kyOnce['깨달음'] = 1; if (!b) S.xp += 300; else { S.cdRed += 10; if (S.mer < 12 && G.jungOk()) G.addJung(1, '깨달음'); else S.xp += 150; } break;
     case '상인 습격': if (!b) { if (S.injured) { G.toast('부상 중이라 지켜볼 수밖에 없었다'); break; } return { duel: G.enemyOf(id), reward: { silver: 80, hyeop: 1 } }; } else { S.silver += 150; S.ak = Math.min(5, S.ak + 1); } break;
     case '패잔병': if (!b) { if (S.injured) break; const r = Math.min(5, G.risk(id) + 1), e = D.EN[r]; return { duel: [e[0], e[1], e[2], e[3], D.EG[r], null, 'n', '패잔병'], reward: { silver: Math.round(D.REW[r][0] * 1.5), xp: D.REW[r][1] * 1.5, fame: Math.round(D.REW[r][2] * 1.5) } }; } else { S.fame += 10; G.hyeopUp(); } break;
     case '비무 초청': if (!b) { const tr = D.TRIAL[Math.max(2, S.realm)] || D.TRIAL[2]; return { duel: tr, series: 3, reward: { fame: 10 } }; } else S.xp += 50; break;
     case '소문': if (!b) { const v = 10 + Math.floor(G.rand() * 21); S.silver += v; G.toast('은자 +' + v); } else G.push({ type: 'info', title: '강호 소문', text: G.pick(D.RUMORS) }); break;
-    case '은거 고수': S.kyOnce['은거 고수'] = 1; if (!b) { S.cdRed += 5; S.xp += 200; G.push({ type: 'info', title: '은거 고수', text: '"언젠가 다시 보세." 초식 쿨 −0.5초, 수련치 +200' }); }
+    case '은거 고수': S.kyOnce['은거 고수'] = 1; if (!b) { S.cdRed += 5; S.xp += 200; G.push({ type: 'info', title: '은거 고수', text: '"언젠가 다시 보세." 초식 쿨 −0.5초, 수련치 +200' }); if (G.learnSkill) G.learnSkill('hgd', '기연'); }
       else { const room = S.turn <= 24 ? 3 - S.extraJung : 9; if (room <= 0 || S.mer >= 12) S.xp += 300; else if (room === 1) { G.addJung(1, '은거 고수'); S.xp += 150; } else G.addJung(2, '은거 고수'); } break;
   }
   G.after(); return null;
@@ -302,15 +312,15 @@ G.landmark = function (id) {
       G.push({ type: 'story', title: '대표 사건 · 소연화 구출', text: '수적이 약초꾼의 딸을 배에 태우려 한다. 두목 물귀신 염칠이 막아선다.', duel: G.bossOf('hunan').slice(0, 6).concat(['b', '물귀신 염칠']), onWin: 'yeonhwa', onLose: 'relm' }); break;
     case 'yunnan': if (G.pres() >= 300) G.kiyeon(id, '은거 고수');
       else { S.explored[id] = false; if (!S.ynPaid) { S.ynPaid = true; S.silver += 30; say('노인이 낚싯대를 거두며 은자 30냥을 던져 준다. "이름이 좀 나면 다시 오게."'); } else say('노인은 고개를 젓는다. "아직이야." (개인 위신 300 이상 필요)'); } break;
-    case 'sichuan': S.xp += 100; say('약초꾼이 영약 한 뿌리를 나눠 준다. 수련치 +100'); break;
+    case 'sichuan': S.xp += 100; say('약초꾼이 영약 한 뿌리를 나눠 준다. "당가 약방에 넘기면 값을 쳐 주지만, 자네가 먼저 쓰게." 수련치 +100'); break;
     case 'hubei': case 'henan': case 'gansu': G.trialEvent(id, 3, 20); break;
     case 'xizang': case 'nanman': case 'saeoe': G.trialEvent(id, 4, 30); break;
     case 'bukhae': G.trialEvent(id, 5, 50); break;
     case 'guangdong': S.quests.push({ kind: '배달', tgt: G.pick(D.ADJ[id].filter(x => !G.closed(x))), mul: 1.05, fm: 3, left: 1, ttl: 3 }); say('향료 상단의 배달 의뢰를 받았다. (보수 ×1.5)'); break;
     case 'jiangnan': S.quests.push({ kind: '토벌', tgt: id, mul: 2.0, fm: 5, left: 2, ttl: 3 }); say('큰 상인의 토벌 의뢰를 받았다. (보수 ×2)'); break;
-    case 'shanxi': S.quests.push({ kind: '토벌', tgt: id, mul: 1.0, fm: 5, left: 2, ttl: 3 }); say('표국 객방에서 토벌 의뢰를 받았다.'); break;
+    case 'shanxi': S.quests.push({ kind: '토벌', tgt: id, mul: 1.0, fm: 5, left: 2, ttl: 3 }); say('표국 객방에서 토벌 의뢰를 받았다.'); if (G.learnSkill) G.learnSkill('sjd', '사건'); break;
     case 'shaanxi': S.cliff = true; say('바람 센 절벽. 이번 턴 남은 수련은 두 배다.'); break;
-    case 'shandong': S.silver += 80; say('녹림 채주가 술잔을 내민다. "낭인 양반, 칼이 좋구먼." 은자 +80'); break;
+    case 'shandong': S.silver += 80; say('녹림 채주가 술잔을 내민다. "낭인 양반, 칼이 좋구먼." 은자 +80'); if (G.learnSkill) G.learnSkill('cps', '사건'); break;
     case 'liaodong': S.ne += 3; G.capStats(); say('백년 인삼을 먹었다. 내공 +3'); break;
     case 'qinghai': S.qhBonus = true; say('곤륜 설산의 타통 터. 이곳에서 타통하면 정경 +1 추가(1회).'); break;
     case 'xinjiang': say('붉은 옷의 사내들이 말없이 지켜본다. 정마의 기운이 짙다.'); break;
@@ -371,7 +381,8 @@ G.buy = function (kind, id) {
     S.silver -= p;
     if (id === 'geum') S.items['금창약']++;
     if (id === 'sohwan') { S.sohwanTurn = S.turn; S.xp += 100; }
-    if (id === 'bigeup' || id === 'sbigeup') { S.onceBuy[id] = 1; G.gup(1); }
+    if (id === 'bigeup') { S.onceBuy[id] = 1; if (G.mgBigeup) G.mgBigeup(); else G.gup(1); }
+    if (id === 'sbigeup') { S.onceBuy[id] = 1; if (G.mgMrcy) G.mgMrcy(); else G.gup(1); }
     G.toast(it.name + ' 구매'); G.after(); return null;
   }
   const mm = D.MYEONGMUL[id]; const p = G.price('mm', id, mm.price);
@@ -473,7 +484,7 @@ G.claim = function () {
   if (any) { G.toast(txt.join('\n')); G.after(); }
   return any;
 };
-G.give = function (rw) { const S = G.S; if (rw.silver) S.silver += rw.silver; if (rw.fame) S.fame += rw.fame; if (rw.xp) S.xp += rw.xp; if (rw.item) S.items[rw.item] = (S.items[rw.item] || 0) + (rw.n || 1); if (rw.hyeop) G.hyeopUp(); };
+G.give = function (rw) { const S = G.S; if (rw.mg && G.learnSkill) G.learnSkill(rw.mg, '사건'); if (rw.silver) S.silver += rw.silver; if (rw.fame) S.fame += rw.fame; if (rw.xp) S.xp += rw.xp; if (rw.item) S.items[rw.item] = (S.items[rw.item] || 0) + (rw.n || 1); if (rw.hyeop) G.hyeopUp(); };
 G.giveText = function (rw) { const a = []; if (rw.silver) a.push('은자 ' + rw.silver); if (rw.fame) a.push('명성 ' + rw.fame); if (rw.xp) a.push('수련치 ' + rw.xp); if (rw.item) a.push(rw.item + ' ' + (rw.n || 1)); return a.length ? ' (' + a.join(', ') + ')' : ''; };
 G.bfsFirstStep = function (pred) { const S = G.S; const prev = { [S.loc]: null }; let front = [S.loc];
   while (front.length) { const nf = []; for (const a of front.slice().sort()) for (const b of D.ADJ[a].slice().sort()) { if (b in prev || G.closed(b)) continue; prev[b] = a; nf.push(b); }
@@ -531,9 +542,9 @@ G.hiddenAI = function () { // 9-1 간이판 (화면에는 소문 1줄만)
   const S = G.S; const ids = Object.keys(D.REGIONS); let line = null;
   const pr = { '정파': 0.15, '사파': 0.30, '마교': S.turn >= 21 ? 0.4 : 0, '세외': 0.20 };
   for (let k = 0; k < 2; k++) {
-    const a = G.pick(ids), [own, camp] = S.owners[a]; if (camp === '중립') continue;
+    const a = G.pick(ids), [own, camp] = S.owners[a]; if (camp === '중립') continue; if (a === 'guizhou') continue;
     if (G.rand() > (pr[camp] || 0)) continue;
-    const cands = D.ADJ[a].filter(b => b !== 'guizhou' && S.owners[b][1] !== camp && (S.owners[b][1] === '중립' ? true : camp !== '세외') && !(S.turn <= 20 && D.OWNER[b][0] === S.owners[b][0] && D.OWNER[b][1] !== '중립'));
+    const cands = D.ADJ[a].filter(b => b !== 'guizhou' && S.owners[b][1] !== camp && (S.owners[b][1] === '중립' ? true : camp !== '세외') && !(S.turn <= 20 && D.OWNER[b][0] === S.owners[b][0] && (D.OWNER[b][1] !== '중립' || b === 'jiangnan')));
     if (!cands.length) continue; const b = G.pick(cands);
     const taken = G.rand() < 0.5;
     S.aiLog.push({ turn: S.turn, a: own, b, prev: S.owners[b][0], taken });

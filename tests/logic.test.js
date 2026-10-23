@@ -39,7 +39,7 @@ const w = G.whereTo(); const st = G.bfsFirstStep(id => !S.bossesKilled[id] && G.
 ok(w.ids.length === 1 && D.ADJ.guizhou.includes(w.ids[0]) && st && w.ids[0] === st.step, '#34 [어디로?] 최단 경로 첫 칸 = ' + (st && G.rname(st.step)) + ' → ' + (st && G.rname(st.goal)));
 // #26 감쇠 (명성 포함)
 S = fresh(); S.realm = 1; const f0 = S.fame, s0 = S.silver; G.fightResult({ kind: 'enemy', id: 'guizhou' }, true, 1); G.fightResult({ kind: 'enemy', id: 'guizhou' }, true, 1);
-ok(S.silver - s0 === 15 && S.fame - f0 === 3, '#26 소탕도 1 → 은자·명성 0.5배 (10+5, 2+1)');
+ok(S.silver - s0 === 12 && S.fame - f0 === 3, '#26 소탕도 1 → 은자·명성 0.5배 (8+4, 2+1 · v0.7.8 은자 ×0.85)');
 // 폐관 #17·#21·#28
 S = fresh(); const E = [1, 2, 4, 6, 8, 10, 14].map(h => G.E0(Math.min(10, h)).toFixed(1)); ok(E.join() === '1.0,2.0,3.4,4.8,5.6,6.4,6.4', '#17 유효시간 ' + E.join());
 S.off.bucket = 0; S.off.bucketTs = Date.now(); S.off.lastSeen = S.off.maxSeen = Date.now(); S.off.acted = true;

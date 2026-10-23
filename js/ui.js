@@ -35,7 +35,8 @@ function showModal(o) { // {title, text, html, buttons:[{t, cls, fn, keep}]}
   });
 }
 UI.modal = modal;
-function refresh() { if (!S()) return; G.claimable(); render(); flushToasts(); }
+function refresh() { if (G.PREVIEW && !document.querySelector('.prevbadge')) { const b = document.createElement('div'); b.className = 'prevbadge'; b.textContent = '미리보기'; document.body.appendChild(b); }
+  if (!S()) return; G.claimable(); render(); flushToasts(); }
 UI.refresh = refresh;
 // 사건 큐 처리
 async function drain() {
@@ -47,8 +48,10 @@ UI.drain = drain;
 async function handle(ev) {
   const s = S();
   switch (ev.type) {
-    case 'info': await modal({ title: ev.title, text: ev.text }); break;
+    case 'info': if (ev.title && ev.title.indexOf('무공 습득') === 0 && s.tut && s.tut.personal && !s.tut.personal.t11) { await modal({ title: ev.title, text: ev.text + '\n\n취팔 노개: "하나만 파면 질리지. 몸에 맞는 걸 골라 써."', buttons: [{ t: '익힌다', cls: 'pri', fn: () => { s.tut.personal.t11 = 1; } }] }); break; }
+      await modal({ title: ev.title, text: ev.text }); break;
     case 'kiyeon': await kiyeonUI(ev); break;
+    case 'choice': { let k = -1; await modal({ title: ev.title, text: ev.text, buttons: ev.opts.map((t, i) => ({ t, cls: i === 0 ? 'pri' : '', fn: () => k = i })) }); if (G[ev.cb]) G[ev.cb](k, ev.arg); break; }
     case 'encounter': { const e = G.enemyOf(ev.id); const w = G.predict(e, 'enemy', ev.id).w;
       await modal({ title: '적 조우', text: D.LOCAL[ev.id][0] + '와(과) 마주쳤다! (행동 추가 소모 없음)', html: '<p>예상 승률 ' + bandBadge(w) + '</p>' });
       const win = await duelUI(e, G.duelOpts('enemy', ev.id), { w }); G.fightResult({ kind: 'enemy', id: ev.id }, win, w); break; }
@@ -130,7 +133,7 @@ function mapSVG() {
     const [x, y] = XY(id), r = G.risk(id), cl = G.closed(id);
     let ring = r <= s.realm ? '#22c55e' : r === s.realm + 1 ? '#f97316' : '#ef4444';
     let fill = cl ? '#3f3f46' : TER[G.kind(id)];
-    if (reveal && s.ev.branched !== false && s.revealMap) fill = D.FACTION_COLOR[s.owners[id][1]] || fill;
+    if (reveal && s.ev.branched !== false && s.revealMap) fill = D.FACTION_COLOR[s.owners[id][0]] || D.FACTION_COLOR[s.owners[id][1]] || fill;
     const adj = mt[id], fl = UI.flash.indexOf(id) >= 0;
     h += '<g class="node' + (fl ? ' flash' : '') + '" data-id="' + id + '">';
     if (adj) h += '<circle cx="' + x + '" cy="' + y + '" r="24" fill="#fbbf2433" stroke="#fbbf24" stroke-width="2"/>';
@@ -186,12 +189,12 @@ function mapTab() {
 // ---------- 인물 ----------
 function charTab() {
   const s = S(), sub = UI.sub.char;
-  let h = '<div class="tabs2">' + [['me', '주인공'], ['mer', '경맥'], ['wanted', '수배첩']].map(([k, t]) => '<button data-sub="' + k + '" class="' + (sub === k ? 'on' : '') + '">' + t + '</button>').join('') + '</div>';
+  let h = '<div class="tabs2">' + [['me', '주인공'], ['mg', '무공'], ['mer', '경맥'], ['wanted', '수배첩']].map(([k, t]) => '<button data-sub="' + k + '" class="' + (sub === k ? 'on' : '') + '">' + t + '</button>').join('') + '</div>';
   if (sub === 'me') {
     h += '<div class="card"><h3>' + esc(s.name) + ' <span class="badge b-y">' + D.REALM[s.realm] + '</span>' + (s.equipped ? ' <span class="badge b-n">' + esc(s.equipped) + '</span>' : '') + '</h3><div class="kv">' +
       '<span>수련치</span><b>' + Math.floor(s.xp) + (s.realm < 5 ? ' / ' + G.needXp() : '') + (s.off.reserve > 0 ? ' (잔여 기운 ' + Math.round(s.off.reserve) + ')' : '') + '</b>' +
       '<span>무력 / 내공 / 지략</span><b>' + s.mu + ' / ' + s.ne + ' / ' + s.ji + '</b>' +
-      '<span>무공</span><b>검법 ' + D.GNAME[s.grade] + (s.gsk ? ' · 초식 숙련 +' + s.gsk * 10 + '%' : '') + '</b>' +
+      '<span>무공</span><b>' + (s.mg ? esc(D.MG[s.mgMain].name) + ' ' + s.mg[s.mgMain].s + '성' : '검법 ' + D.GNAME[s.grade] + (s.gsk ? ' · 초식 숙련 +' + s.gsk * 10 + '%' : '')) + '</b>' +
       '<span>정경</span><b>' + s.mer + ' / 12' + (s.imdok ? ' + 임독양맥' : '') + '</b>' +
       '<span>개인 명성 / 위신</span><b>' + s.fame + ' / ' + G.pres() + '</b>' +
       '<span>협행 / 악행</span><b>' + s.hyeop + ' / ' + s.ak + '</b>' +
@@ -201,6 +204,7 @@ function charTab() {
       '<span>소지품</span><b>금창약 ' + s.items['금창약'] + ' · 소환단 ' + s.items['소환단'] + '</b></div>' +
       '<div class="row" style="margin-top:6px"><button class="sm" id="useSoh" ' + (s.items['소환단'] ? '' : 'disabled') + '>소환단 먹기</button><button class="sm" id="useGeum2" ' + (s.items['금창약'] && s.injured ? '' : 'disabled') + '>금창약 쓰기</button></div></div>';
     h += '<div class="card"><h3>별호</h3>' + (s.titles.length ? s.titles.map(t => '<div class="row"><span class="f">' + esc(t) + (s.equipped === t ? ' (장착)' : '') + '</span>' + (s.equipped !== t ? '<button class="sm" data-eq="' + esc(t) + '" ' + (s.fame >= 100 ? '' : 'disabled') + '>장착' + (s.fame >= 100 ? '' : '(명성 100)') + '</button>' : '') + '</div>').join('') : '<div class="muted">아직 없다. 첫 두목을 쓰러뜨려라.</div>') + '</div>';
+  } else if (sub === 'mg') { h += mgTab();
   } else if (sub === 'mer') {
     h += '<div class="card"><h3>경맥 <span class="muted">' + (s.realm < 5 ? '다음 경지 ' + D.REALM[s.realm + 1] + ': 정경 ' + s.mer + '/' + G.gateMer() + (s.realm === 4 ? ' + 임독양맥' : '') : '') + '</span></h3><div class="mer">' +
       D.JUNG.map((n, i) => '<div class="' + (i < s.mer ? 'o' : i === s.mer ? 'n' : '') + '">' + (i + 1) + '. ' + n + (i === 3 ? ' ★운기' : i === 7 ? ' ★초식' : i === 11 ? ' ★체력' : '') + '</div>').join('') +
@@ -306,7 +310,8 @@ async function fightSheet() {
   const s = S(), ts = G.fightTargets();
   let pick = -1;
   await modal({ title: '싸움 · ' + G.rname(s.loc), html: ts.map((t, i) => { const pr = G.predict(t.e, t.kind, t.id); return '<div class="card"><div class="row"><span class="f">' + esc(t.label) + '<br><span class="muted">' + D.REALM[t.e[0]] + ' · 무 ' + t.e[1] + ' 내 ' + t.e[2] + ' · ' + D.GNAME[t.e[4]] + ' · 특기 ' + t.e[5] + '(' + D.TRAITS[t.e[5]] + ')' + (G.debug ? ' · 약 ' + pr.len.toFixed(0) + '초' : '') + '</span></span>' + bandBadge(pr.w) + '</div></div>'; }).join(''),
-    buttons: ts.map((t, i) => ({ t: (t.kind === 'boss' ? '두목과 싸운다' : '출몰 적과 싸운다'), cls: 'pri', fn: () => pick = i })).concat([{ t: '그만둔다' }]) });
+    buttons: ts.map((t, i) => ({ t: (t.kind === 'boss' ? '두목과 싸운다' : '출몰 적과 싸운다'), cls: 'pri', fn: () => pick = i })).concat(s.mg ? [{ t: '핫키 바꾸기', fn: () => pick = -2 }] : []).concat([{ t: '그만둔다' }]) });
+  if (pick === -2) { await hotSheet(); return fightSheet(); }
   if (pick < 0) return; const t = ts[pick], w = G.predict(t.e, t.kind, t.id).w, b = DuelLib.band(w)[0];
   if (b === '위험') { const i = await modal({ title: '위험', text: '예상 승률: 위험. 정말 싸우겠습니까?', buttons: [{ t: '다음에', cls: 'pri' }, { t: '싸운다', cls: 'red' }] }); if (i !== 1) return; }
   if (b === '무모') { if (!(await confirmP('예상 승률: 무모. 정말 싸우겠습니까?', '싸운다', '다음에'))) return;
@@ -320,50 +325,138 @@ async function fightSheet() {
 function duelUI(e, opts, cfg) {
   cfg = cfg || {}; const s = S();
   return new Promise(resolve => {
-    const d = new DuelLib.Duel(G.me(), e.slice(0, 7), Object.assign({}, opts, { window: cfg.window || 1.2 }), G.rand);
-    if (d.auto !== null) { G.toast((d.auto ? '압도: ' : '역부족: ') + (e[7] || '상대') + ' (경지 차 2 이상, 자동 판정)'); s.lastDuel = { nm: e[7], win: d.auto, t: 1, gise: 0, ok: 0, log: ['경지 차 자동 판정'] }; flushToasts(); return resolve(d.auto); }
+    const o = Object.assign(G.mgOpts ? G.mgOpts(cfg) : {}, opts, { window: cfg.window || 1.2 });
+    const seed = G.duelSeed ? G.duelSeed() : 0, p = G.me();
+    const d = new DuelLib.Duel(p, e.slice(0, 7), o, G.rand, seed);
+    const used = new Set(), firstNew = []; let manN = 0;
+    const end = (win) => { if (G.mgDuelEnd) G.mgDuelEnd(win, cfg.w, { used: [...used] }); G.inDuel = false; };
+    if (d.auto !== null) { G.toast((d.auto ? '압도: ' : '역부족: ') + (e[7] || '상대') + ' (경지 차 2 이상, 자동 판정)'); s.lastDuel = { nm: e[7], win: d.auto, t: 1, gise: 0, ok: 0, log: ['경지 차 자동 판정'] }; end(d.auto); flushToasts(); return resolve(d.auto); }
+    G.inDuel = true; if (window.FX) FX.opt = Object.assign({}, FX.opt, s.opt || {});
     const ov = $('#overlay'); ov.classList.remove('hidden');
-    const nm = e[7] || '상대';
-    ov.innerHTML = '<div class="duel"><div class="fighter"><div class="nm"><b>' + esc(nm) + '</b><span>' + D.REALM[e[0]] + ' · ' + (e[5] ? '특기 ' + e[5] : '') + (e[6] === 'm' ? ' · 운기 1' : '') + (e[6] === 'b' ? ' · 두목' : '') + '</span></div><div class="hp"><i id="ehp"></i></div><div class="gise"><i id="gbar"></i></div><div class="muted" id="gtxt">기세 게이지</div></div>' +
-      '<div class="arena" id="arena">🗡️ ⚔️ 👤</div><div class="dlog" id="dlog"></div>' +
-      '<div class="fighter"><div class="nm"><b>' + esc(s.name) + '</b><span>' + D.REALM[s.realm] + ' · 초식 <span id="cd">준비</span> · 운기 <span id="heal">1/1</span></span></div><div class="hp me"><i id="php"></i></div>' + (cfg.w !== undefined ? '<div class="muted">예상 승률 ' + DuelLib.band(cfg.w)[0] + ' · 내 파훼율 ' + Math.round(G.parryRate() * 100) + '%</div>' : '') + '</div>' +
-      '<button class="parry" id="parry" disabled>파훼</button><div class="muted" style="text-align:center">초식·운기조식은 자동. 적이 기를 모으면 [파훼]!</div></div>';
-    const P = $('#parry'); let win = null, winT = 0, timer = null, waitTimer = null, startAt = performance.now();
-    const arena = $('#arena');
-    const pop = (txt, col) => { const el = document.createElement('div'); el.className = 'dmg'; el.style.color = col; el.style.left = (30 + Math.random() * 40) + '%'; el.textContent = txt; arena.appendChild(el); setTimeout(() => el.remove(), 800); };
+    const nm = e[7] || '상대', f20 = d.f20, hot = f20 ? d.hot : [];
+    const es = d.eset ? ' · ' + d.eset.mg : '';
+    const btns = f20 ? '<div class="hotrow" id="hotrow">' + hot.map((pi, k) => { const c = d.pool[pi], tier = D.QI_TIER(c.qi); return '<button class="hk" data-pi="' + pi + '" style="--tc:' + tier[1] + '" aria-label="' + esc(c.name) + ', 진기 ' + c.qi + '"><span class="cdr"></span><span class="ic">' + ({ 기수식: '◇', 초식: '◆', 절초: '✦', 단초: '❖' }[c.kind] || '◆') + '</span><span class="hn">' + esc(c.name.slice(0, 2)) + '</span><span class="qc">' + c.qi + '</span>' + (c.lock ? '<span class="lk">🔒</span>' : '') + '<span class="hs" aria-live="polite"></span></button>'; }).join('') + '</div><div class="lag"><i id="lagbar"></i></div>' : '<div class="hotrow empty"></div>';
+    ov.innerHTML = '<div class="duel' + (f20 ? ' f20' : '') + '"><div class="fighter top"><div class="nm"><b>' + esc(nm) + '</b><span>' + D.REALM[e[0]] + (e[5] ? ' · 특기 ' + e[5] : '') + (e[6] === 'm' ? ' · 운기 1' : '') + (e[6] === 'b' ? ' · 두목' : '') + esc(es) + '</span></div><div class="hp"><i id="ehp"></i></div><div class="gise"><i id="gbar"></i></div><div class="muted sm1" id="gtxt">기세 게이지</div>' +
+      '<div class="hp me"><i id="php"></i></div>' + (f20 ? '<div class="qi" id="qibar" title="진기"><i id="qif"></i><b id="qires"></b>' + qiTicks(d) + '</div>' : '') + '</div>' +
+      '<div class="stage" id="arena"><canvas id="fx"></canvas><div class="who e">🗡️</div><div class="who p">👤</div></div><div class="dlog" id="dlog"></div>' +
+      '<div class="fighter bot"><div class="nm"><b>' + esc(s.name) + '</b><span>' + D.REALM[s.realm] + ' · 초식 <span id="cd">준비</span> · 운기 <span id="heal">1/1</span>' + (f20 ? ' · 진기 <span id="qitxt"></span>' : '') + '</span></div>' + (cfg.w !== undefined ? '<div class="muted sm1">예상 승률 ' + DuelLib.band(cfg.w)[0] + ' · 내 파훼율 ' + Math.round(G.parryRate() * 100) + '%</div>' : '') + '</div>' +
+      btns + '<button class="parry' + (f20 ? ' f20' : '') + '" id="parry" disabled>파훼</button><div class="muted sm1" style="text-align:center" id="dhint">' + (f20 ? '초식은 자동으로 나간다. 버튼으로 다음 수를 예약할 수 있다.' : '초식·운기조식은 자동. 적이 기를 모으면 [파훼]!') + '</div></div>';
+    const P = $('#parry'), arena = $('#arena'); let timer = null, waitTimer = null, raf = 0, acc = 0, last = 0, stopUntil = 0, ended = false;
+    if (window.FX) FX.attach(arena, $('#fx'));
+    const tipKey = s.realm >= 6 ? 'qi_tip2' : 'qi_tip'; s.tips = s.tips || {};
+    if (f20 && hot.length && !s.tips[tipKey]) { s.tips[tipKey] = 1; G.toast(s.realm >= 6 ? '내공이 깊어져 내력이 넘친다 — 결정타를 여러 번 쓸 수 있다. 절초가 준비되는 대로 꽂되, 숨 고를 틈을 생각하라.' : '내력을 모아 초식에 싣는다 — 가벼운 초식은 진기가 적게, 큰 초식은 많이 든다. 쓰고 나면 숨을 고르느라 한 박자 늦는다. 적이 기절했을 때나 끝낼 수 있을 때 써라.'); flushToasts(); }
+    const t12 = f20 && s.realm >= 2 && s.tut && s.tut.personal && !s.tut.personal.skipped && !s.tut.personal.t12;
+    if (t12) $('#dhint').textContent = '버튼을 누르면 다음 수를 고를 수 있다. 안 눌러도 몸이 알아서 움직인다.';
+    const pop = (kind, txt, side) => { if (window.FX) { const ms = FX.play(kind, { text: txt, side }); const st = FX.hitstop(ms, s.speed || 1, UI.instant || UI.autoParry); if (st) stopUntil = Math.max(stopUntil, performance.now() + st); } };
+    const flashMsg = (pi, msg) => { const b = ov.querySelector('.hk[data-pi="' + pi + '"] .hs'); if (!b) return; b.textContent = msg; setTimeout(() => { b.textContent = ''; }, 1000); };
+    const btnState = () => {
+      if (!f20) return; const prevQ = btnState.q == null ? d.qi : btnState.q; btnState.q = d.qi;
+      ov.querySelectorAll('.hk').forEach(b => { const pi = +b.dataset.pi, c = d.pool[pi], cd = d.cdLeft(pi), wheel = d.deck.has(pi) && d.deck.size < d.n, low = d.qi < c.qi;
+        const res = d.reserve === pi, can = d.canReserve(pi) && !c.lock;
+        b.classList.toggle('res', res); b.classList.toggle('low', low && !res); b.classList.toggle('cd', (cd > 0 || wheel) && !res); b.classList.toggle('gs', d.waiting); b.classList.toggle('lockd', !!c.lock);
+        b.querySelector('.cdr').style.background = cd > 0 ? 'conic-gradient(#0009 ' + Math.min(100, cd / d.cdOf(pi, false) * 100) + '%, transparent 0)' : 'none';
+        const st = res ? '예약' : c.lock ? '초절정부터' : cd > 0 ? (cd / 10).toFixed(1) + '초' : wheel ? '바퀴' : low ? Math.ceil((c.qi - d.qi) / (D.DUEL.QI_REG)) + '초 · 파훼 +25' : '';
+        let sub = b.querySelector('.st'); if (!sub) { sub = document.createElement('span'); sub.className = 'st'; b.appendChild(sub); } sub.textContent = st;
+        b.setAttribute('aria-label', c.name + ', 진기 ' + c.qi + (res ? ', 예약됨' : can ? '' : ', 쓸 수 없음: ' + (c.lock ? '초절정부터' : low ? '진기 부족' : cd > 0 ? '쿨' : wheel ? '바퀴' : '대기')));
+        if (prevQ < c.qi && d.qi >= c.qi && !(s.opt && s.opt.flash)) { b.classList.add('ping'); setTimeout(() => b.classList.remove('ping'), 250); } });
+      const lag = $('#lagbar'); if (lag) { const left = Math.max(0, d.ns - d.t), tot = d.lastLag || d.pcd; lag.style.transform = 'scaleX(' + (d.hist.length ? Math.min(1, left / tot) : 0) + ')'; }
+    };
     const draw = () => {
       $('#ehp').style.width = Math.max(0, d.he / d.ehp * 100) + '%'; $('#php').style.width = Math.max(0, d.hp / d.php * 100) + '%';
       const gp = d.waiting ? 100 : Math.max(0, 100 - (d.nextg - d.t) / 60 * 100); $('#gbar').style.width = gp + '%';
-      $('#gtxt').textContent = d.waiting ? '⚠ 기세! 지금 파훼!' : (d.stun > 0 ? '💫 기절 (받는 피해 ×1.5)' : '다음 기세 ' + ((d.nextg - d.t) / 10).toFixed(1) + '초');
-      $('#cd').textContent = d.ns - d.t <= 0 ? '준비' : ((d.ns - d.t) / 10).toFixed(1) + '초';
+      $('#gtxt').textContent = d.waiting ? '⚠ 기세! 지금 파훼!' + (d.eset ? ' 「' + d.eset.kill[0] + '」' : '') : (d.stun > 0 ? '💫 기절 (받는 피해 ×1.5)' : '다음 기세 ' + ((d.nextg - d.t) / 10).toFixed(1) + '초');
+      $('#cd').textContent = d.ns - d.t <= 0 ? '준비' : ((d.ns - d.t) / 10).toFixed(1) + '초' + (f20 && d.ns - d.t <= 10 && d.hist.length ? ' ▸' : '');
       $('#heal').textContent = (1 - d.nh) + '/1';
-      $('#dlog').innerHTML = d.log.slice(-4).map(esc).join('<br>');
-      for (const [k, v] of d.ev || []) { if (k === 'pskill') pop('초식 ' + Math.round(v), '#fbbf24'); if (k === 'eskill') pop('적 초식 −' + Math.round(v), '#f87171'); if (k === 'parryok') pop('파훼 성공!', '#86efac'); if (k === 'parryfail') pop('강타 −' + Math.round(v), '#ef4444'); if (k === 'pheal') pop('운기조식', '#60a5fa'); if (k === 'eheal') pop('적 운기', '#c084fc'); }
-      d.ev = [];
+      if (f20) { $('#qif').style.width = (d.qi / d.qmax * 100) + '%'; $('#qitxt').textContent = Math.floor(d.qi) + '/' + d.qmax; const r = d.reserve != null ? d.pool[d.reserve] : null; const rb = $('#qires'); rb.style.left = r ? Math.max(0, (d.qi - r.qi) / d.qmax * 100) + '%' : '0'; rb.style.width = r ? (Math.min(d.qi, r.qi) / d.qmax * 100) + '%' : '0'; }
+      $('#dlog').innerHTML = d.log.slice(-2).map(esc).join('<br>');
+      for (const ev of d.ev || []) { const k = ev[0], v = ev[1];
+        if (k === 'pskill') { const c = f20 ? d.pool.find(x => x.id === ev[2]) : null, nm2 = c ? c.name : '초식'; if (ev[4]) { manN++; pop('manual', '✋ ' + nm2 + ' ' + Math.round(v), 'e'); if (window.FX) FX.banner('✋ 결정타', 800, 'b1'); } else pop('pskill', nm2 + ' ' + Math.round(v), 'e');
+          if (c) { if (!used.has(c.id) && s.fxSeen.indexOf(c.id) < 0) { s.fxSeen.push(c.id); firstNew.push(c.name); if (window.FX && !UI.instant) FX.banner('「' + c.name + '」', 1200, 'b2'); } used.add(c.id); } }
+        if (k === 'phit' && f20) pop('phit', '' + Math.round(v), 'e');
+        if (k === 'eskill') pop('eskill', (ev[2] ? ev[2] + ' ' : '적 초식 ') + '−' + Math.round(v), 'p');
+        if (k === 'parryok') pop('parryok', '파훼 성공!' + (f20 ? ' 진기 +25' : ''), 'p'); if (k === 'parryfail') pop('parryfail', '강타 −' + Math.round(v), 'p');
+        if (k === 'pheal') pop('pheal', '운기조식', 'p'); if (k === 'eheal') pop('eheal', '적 운기', 'e'); if (k === 'pdodge') pop('pdodge', '회피', 'p'); if (k === 'ctr') pop('ctr', '반격 ' + Math.round(v), 'e'); if (k === 'roll') pop('roll', '구르기!', 'p');
+        if (k === 'resfail') { flashMsg(v, '진기 부족'); } }
+      d.ev = []; btnState();
     };
-    const finish = () => { clearInterval(timer); clearTimeout(waitTimer); draw(); const r = d.done;
+    if (f20) ov.querySelectorAll('.hk').forEach(b => b.onclick = () => { const pi = +b.dataset.pi, c = d.pool[pi]; if (d.done) return;
+      if (t12) s.tut.personal.t12 = 1;
+      if (c.lock) { flashMsg(pi, '초절정부터'); return; }
+      if (d.reserve === pi) { d.reserveSkill(pi); draw(); return; }
+      if (!d.reserveSkill(pi)) { const m = d.qi < c.qi ? '진기 부족' : d.waiting ? '기세 중' : !d.hist.length ? '첫 박자' : '아직'; flashMsg(pi, m); const q = $('#qibar'); if (q && !(s.opt && s.opt.flash)) { q.classList.add('shk'); setTimeout(() => q.classList.remove('shk'), 300); } if (s.opt && s.opt.vib && navigator.vibrate) try { navigator.vibrate(20); } catch (x) {} return; }
+      draw(); });
+    const finish = () => { if (ended) return; ended = true; clearInterval(timer); clearTimeout(waitTimer); cancelAnimationFrame(raf); draw(); const r = d.done;
       UI.lastDuelLog = d.log.slice(); s.lastDuel = { nm, win: r.win, t: r.t, gise: d.gise, ok: d.okp, log: d.log.slice(-40) };
+      end(r.win); if (window.FX) FX.clear();
       P.disabled = false; P.classList.remove('live'); P.textContent = r.win ? '승리! (' + r.t.toFixed(1) + '초 · 기세 ' + d.gise + '회 · 파훼 ' + d.okp + ')' : '패배… (' + r.t.toFixed(1) + '초)';
+      if (f20) { const h = $('#dhint'); h.id = 'dres'; h.textContent = '이번 싸움 초식 ' + used.size + '종' + (firstNew.length ? ' · 처음 쓴 초식 ' + firstNew.join('·') : '') + ' · 결정타 ' + manN + '회'; }
       P.style.fontSize = '18px'; P.onclick = () => { ov.classList.add('hidden'); ov.innerHTML = ''; resolve(r.win); }; };
     const t3 = () => { if (cfg.boss) G.tutUse('T3'); };
     const onGise = () => {
-      if (UI.instant || UI.autoParry) { const ok = G.rand() < Math.min(0.95, G.parryRate() + (d.fails2 >= 2 ? 0.15 : 0)); d.parry(ok); t3(); return; }
-      clearInterval(timer); timer = null; P.disabled = false; P.classList.add('live'); const wms = d.window() * 1000;
+      if (UI.instant || UI.autoParry) { const ok = G.rand() < Math.min(0.95, G.parryRate() + (d.fails2 >= 2 ? 0.15 : 0) + d.parryBonus()); d.parry(ok); t3(); return; }
+      stopUntil = 0; // 정지 중 기세가 오면 정지를 끊고 연다
+      cancelAnimationFrame(raf); raf = 0; P.disabled = false; P.classList.add('live'); const wms = d.window() * 1000;
       P.textContent = '파훼! (' + d.window().toFixed(1) + '초)';
-      const t0 = performance.now(); draw();
+      draw();
       P.onclick = () => { if (!d.waiting) return; clearTimeout(waitTimer); resolveP(true); };
       waitTimer = setTimeout(() => resolveP(false), wms);
       function resolveP(ok) { if (!d.waiting) return; s.parryHist.push(ok ? 1 : 0); if (s.parryHist.length > 20) s.parryHist.shift(); d.parry(ok); t3(); P.classList.remove('live'); P.disabled = true; P.textContent = ok ? '파훼 성공!' : '파훼 실패…'; P.onclick = null; draw(); if (d.done) return finish(); run(); }
     };
     const stepOnce = () => { d.stepA(); if (d.done) return 'done'; if (d.waiting) return 'gise'; return null; };
+    // rAF 누산기: 100ms마다 1틱(2×면 50ms) · 정지 중 누산 멈춤 · 백그라운드 누산 상한 1초
     const run = () => {
       if (UI.instant) { let g = 0; while (!d.done && g++ < 5000) { const r = stepOnce(); if (r === 'gise') onGise(); } return finish(); }
-      const per = Math.max(1, Math.round(s.speed || 1));
-      timer = setInterval(() => { if (UI.paused) return; for (let i = 0; i < per; i++) { const r = stepOnce(); if (r === 'done') return finish(); if (r === 'gise') { if (UI.autoParry) { onGise(); if (d.done) return finish(); continue; } draw(); return onGise(); } } draw(); }, 100);
+      const per = (s.speed || 1) >= 2 ? 50 : 100; last = performance.now(); acc = 0;
+      const loop = (now) => { raf = 0; const dt = Math.min(1000, now - last); last = now; if (window.FX) { FX.frame(dt / 1000); FX.guard(dt, lv => { s.opt.fx = lv; G.save(); G.toast('연출을 한 단계 낮췄다(' + lv + ')'); flushToasts(); }); }
+        if (!UI.paused && now >= stopUntil) acc += dt;
+        while (acc >= per) { acc -= per; const r = stepOnce(); if (r === 'done') return finish(); if (r === 'gise') { if (UI.autoParry) { onGise(); if (d.done) return finish(); continue; } draw(); return onGise(); } }
+        draw(); raf = requestAnimationFrame(loop); };
+      raf = requestAnimationFrame(loop);
     };
     draw(); setTimeout(run, UI.instant ? 0 : 600);
   });
 }
+function qiTicks(d) { const mins = d.hot.map(i => d.pool[i].qi), out = []; const m = Math.min.apply(null, mins.length ? mins : [999]); for (let q = m; q < d.qmax && out.length < 9; q += m) out.push('<s style="left:' + (q / d.qmax * 100) + '%"></s>'); return out.join(''); }
+function mgTab() {
+  const s = S(); if (!s.mg) return '<div class="card">무공 없음</div>';
+  const ids = Object.keys(s.mg).filter(id => D.MG[id]), tag = id => id === s.mgMain ? ' <b class="gold">주</b>' : id === s.mgSim ? ' <b class="gold">심법</b>' : id === s.mgSin ? ' <b class="gold">신법</b>' : '';
+  let h = '<div class="card"><h3>익힌 무공 <span class="muted">핫키 ' + (s.hot || []).filter(x => x != null).length + '/' + G.hotN() + '</span></h3>' +
+    ids.map(id => { const M = D.MG[id], m = s.mg[id], un = (M.moves || []).filter(v => v.seong <= m.s);
+      return '<div class="mgrow"><div class="row"><span class="f"><b>' + esc(M.name) + '</b>' + tag(id) + ' <span class="muted">' + D.GNAME[M.grade] + ' ' + M.cat + ' · ' + m.s + '성/' + G.mgCap(id) + (G.mgSealed(id) ? ' · 봉인(일류부터)' : '') + '</span></span>' +
+        (M.cat === '외공' && id !== s.mgMain && !G.mgSealed(id) ? '<button class="sm" onclick="G.mgSetMain(\'' + id + '\');UI.refresh()">주로</button>' : '') + '</div>' +
+        (un.length ? '<div class="muted sm1">' + un.map(v => esc(v.name) + '(' + v.qi + ')').join(' · ') + '</div>' : '') + '</div>'; }).join('') +
+    (s.mgDan.length ? '<div class="muted sm1">단초: ' + s.mgDan.map(k => esc(D.DANCHO[k].name)).join(' · ') + '</div>' : '') +
+    '<div class="row" style="margin-top:6px"><button class="pri" id="hotBtn" onclick="UI.hotSheet().then(UI.refresh)">핫키 편성 ' + (s.hot || []).filter(x => x != null).length + '/' + G.hotN() + '</button></div></div>';
+  if (s.tut && s.tut.personal && !s.tut.personal.t11 && ids.length > 2) s.tut.personal.t11 = 1;
+  return h;
+}
+function hotSheet() {
+  const s = S(); if (!s.mg) return Promise.resolve();
+  const n = G.hotN(), cands = G.hotCands(), by = id => cands.find(c => c.id === id);
+  let slots = (s.hot || []).slice(0, n).map(x => x && by(x) ? x : null); while (slots.length < n) slots.push(null);
+  let sel = slots.indexOf(null), err = '';
+  const qmax = D.DUEL.QI_MAX(D.QI_NY[s.realm]), mx = Math.max.apply(null, cands.map(G.hotScore));
+  const body = () => { const fill = slots.filter(Boolean).map(by), mn = fill.length ? Math.min.apply(null, fill.map(c => c.qi)) : 0;
+    return '<div class="hksheet"><div class="muted">내 진기 ' + qmax + ' · ' + D.REALM[s.realm] + '</div><div class="hkslots">' +
+      slots.map((id, i) => { const c = id && by(id); if (!c) return '<div class="hkslot' + (i === sel ? ' sel' : '') + '" data-sl="' + i + '">빈 칸</div>'; const lk = G.hotLocked(c), t = D.QI_TIER(c.qi);
+        return '<div class="hkslot f' + (i === sel ? ' sel' : '') + (lk ? ' lk' : '') + '" data-sl="' + i + '" style="--tc:' + t[1] + '">' + (lk ? '🔒 ' : '') + esc(c.name) + '<span class="qc">' + t[0] + ' ' + c.qi + '</span></div>'; }).join('') + '</div>' +
+      (slots.some(id => id && G.hotLocked(by(id))) ? '<div class="muted sm1" style="color:#eab308">🔒 초절정부터 쓸 수 있다</div>' : '') +
+      '<div class="muted sm1">이 편성: 싸움 시작 때 ' + (mn ? Math.floor(qmax / mn) : 0) + '번 · 파훼 성공마다 +25' + (err ? ' · <b style="color:#f87171">' + esc(err) + '</b>' : '') + '</div><div class="muted sm1">누르면 넣기 · 칸 길게 누르면 빼기 · 칸끼리 끌어 순서 바꾸기</div>' +
+      '<div class="hklist">' + cands.map(c => { const t = D.QI_TIER(c.qi), on = slots.indexOf(c.id) >= 0;
+        return '<div class="hkc' + (c.inPool ? '' : ' out') + (on ? ' on' : '') + '" data-id="' + c.id + '"><span class="tq" style="--tc:' + t[1] + '">' + c.qi + '</span><span class="f"><b>' + esc(c.name) + '</b> <span class="muted sm1">' + c.kind + (c.eff && c.eff.length ? ' · ' + c.eff.join('·') : '') + (G.hotLocked(c) ? ' · 🔒초절정부터' : '') + (c.inPool ? '' : ' · 자동 칸 밖') + '</span></span><span style="width:40px"><div class="w" style="width:' + Math.round(G.hotScore(c) / mx * 100) + '%"></div></span></div>'; }).join('') + '</div></div>'; };
+  let res = 'x';
+  const open = () => modal({ title: '핫키 편성', html: '<div id="hkbody">' + body() + '</div>', buttons: [{ t: '기본으로', fn: () => res = 'def' }, { t: '완료', cls: 'pri', fn: () => res = 'ok' }],
+    after: m => { const bind = () => { const b = m.querySelector('#hkbody'); b.innerHTML = body();
+      b.querySelectorAll('.hkc').forEach(el => el.onclick = () => { const id = el.dataset.id, at = slots.indexOf(id); err = '';
+        if (at >= 0) { slots[at] = null; sel = at; } else { let i = sel >= 0 && sel < n ? sel : slots.indexOf(null); if (i < 0) i = n - 1; slots[i] = id; const nx = slots.indexOf(null); sel = nx; } bind(); });
+      b.querySelectorAll('.hkslot').forEach(el => { const i = +el.dataset.sl; let lt = 0, down = false;
+        el.onpointerdown = ev => { down = true; lt = setTimeout(() => { if (!down) return; down = false; slots[i] = null; sel = i; bind(); }, 500); };
+        el.onpointerup = ev => { clearTimeout(lt); if (!down) return; down = false; const t = document.elementFromPoint(ev.clientX, ev.clientY), j = t && t.closest('.hkslot') ? +t.closest('.hkslot').dataset.sl : i;
+          if (j !== i) { const x = slots[i]; slots[i] = slots[j]; slots[j] = x; sel = j; } else sel = i; bind(); };
+        el.onpointercancel = () => { clearTimeout(lt); down = false; }; }); }; bind(); } });
+  return open().then(() => { if (res === 'def') { G.hotDefault(); G.save(); return hotSheet(); } if (res === 'ok') { const e = G.setHot(slots); if (e) G.toast(e); flushToasts(); } });
+}
+UI.hotSheet = hotSheet; UI.refresh = () => refresh();
 UI.duelUI = duelUI;
 // ---------- 사건 UI ----------
 async function kiyeonUI(ev) {
@@ -372,11 +465,13 @@ async function kiyeonUI(ev) {
   const r = G.chooseKiyeon(ev.name, ev.id, b);
   if (r && r.duel) {
     const n = r.series || 1;
+    let wins = 0;
     for (let i = 0; i < n; i++) { const w = G.predict(r.duel, 'x', ev.id).w;
       if (n > 1) await modal({ title: '비무 ' + (i + 1) + '/' + n, text: (r.duel[7] || '상대') + ' · 예상 ' + DuelLib.band(w)[0] });
       const win = await duelUI(r.duel, {}, { w });
       if (!win) { S().injured = true; G.toast('패배. 부상(이번 턴 싸움 불가)'); break; }
-      G.give(r.reward); G.toast('승리' + G.giveText(r.reward)); }
+      wins++; G.give(r.reward); G.toast('승리' + G.giveText(r.reward)); }
+    if (n > 1 && wins >= 2 && ev.id === 'anhui' && G.learnSkill) G.learnSkill('ng1', '비무');
     G.after();
   }
 }
@@ -391,6 +486,7 @@ async function storyUI(ev) {
   if (win) { const c = ev.onWin || '';
     if (c === 'yeonhwa') { s.silver += 50; s.yeonhwaMet = true; await modal({ title: '인연 · 소연화', text: '약초꾼의 딸 소연화를 구했다. "이 은혜는 잊지 않을게요." 은자 +50, 부상 1회 무료 치료 쪽지' }); s.items['금창약']++; }
     else if (c.startsWith('fame:')) { const f = +c.slice(5); s.fame += f; G.toast('승리! 명성 +' + f); }
+    if (ev.trial && G.mgTrialWin) G.mgTrialWin(s.loc);
   } else { s.injured = true; if (ev.trial || ev.onLose === 'relm') { if (ev.trial || ev.title.indexOf('소연화') >= 0) s.explored[s.loc] = false; } G.toast('패배. 부상(이번 턴 싸움 불가). 다음에 다시.'); }
   G.after();
 }
@@ -499,20 +595,23 @@ async function branchUI() {
   await modal({ title: '정마대전 전조', text: '"정파와 마교가 칼을 뽑았다."\n30년 휴전이 끝났다. 천마신교가 정마대전을 선포했다.' });
   s.revealMap = true; G.save(); UI.tab = 'map'; refresh();
   const taken = s.aiLog.filter(x => x.taken);
-  const empty = Object.keys(s.owners).filter(k => s.owners[k][1] === '중립').length;
+  const empty = Object.keys(s.owners).filter(k => s.owners[k][0] === '무주지').length;
   await modal({ title: '천하 판도 공개', text: '2년 동안 강호는 이렇게 바뀌었다.\n' + (taken.length ? taken.slice(-8).map(x => '· ' + G.dateStr(x.turn) + ' ' + x.a + '이(가) ' + G.rname(x.b) + '을(를) 차지 (' + x.prev + ')').join('\n') : '· 큰 주인 바뀜은 없었다.') + '\n\n지도에 처음으로 세력 색이 칠해졌다. 무주지 ' + empty + '곳.', html: '<p class="muted">🟦정파 🟫사파 🟥마교 🟪세외 ⬜무주지</p>' });
   await routeCards(false);
 }
 async function routeCards(again) {
   const s = S(); let pick = -1;
   if (again) { s.myPathSeen = true; G.after(); }
+  for (;;) {
   const card = (n, t, d, sub, ok) => '<div class="routec ' + (ok ? '' : 'off') + '"><h3>' + t + '</h3><div>' + d + '</div><div class="muted">' + sub + '</div></div>';
   await modal({ title: again ? '나의 길' : '진로 선택', html:
     card(1, '① 내 문파를 세운다', '"이름 없는 문파, 내가 장문인이다"', '2단계에서 열림 (선택 불가)', false) +
     card(2, '② 명문의 문을 두드린다', '"구파일방·오대세가·사파·마교·세외에 입문해 정상까지"', '준비 중', false) +
-    card(3, '③ 홀로 강호를 걷는다', '"소속 없이 현상금·호위·비무로"', s.route === 3 ? '지금 걷는 길' : '조건 없음 · 선택 가능', true),
-    buttons: again ? [{ t: '닫기', cls: 'pri' }] : [{ t: '③ 홀로 강호를 걷는다', cls: 'pri', fn: () => pick = 3 }, { t: '① 2단계에서 열림', disabled: true }, { t: '② 준비 중', disabled: true }] });
+    card(3, '③ 낭인 계속', '홀로 강호를 걷는다 — 소속 없이 현상금 · 호위 · 비무로', s.route === 3 ? '지금 걷는 길' : '조건 없음 · 선택 가능', true),
+    buttons: again ? [{ t: '닫기', cls: 'pri' }] : [{ t: '③ 낭인 계속', cls: 'pri', fn: () => pick = 3 }, { t: '① 2단계에서 열림', disabled: true }, { t: '② 준비 중', disabled: true }] });
   if (again) { refresh(); return; }
+  if (await confirmP('문파의 무공 없이 걷는다. 상승 무공은 비급을 구해야만 익힐 수 있다.', '걷는다', '다시 고른다')) break;
+  }
   G.chooseRoute(3); s.myPathSeen = false;
   const i = await modal({ title: '홀로 걷는 길', text: '취팔 노개: "소속 없이도 칼 한 자루면 먹고산다. 현상금, 호위, 비무."', buttons: [{ t: '배우며 시작', cls: 'pri' }, { t: '건너뛰기' }] });
   if (i === 1 && (await confirmP('낭인 튜토리얼을 건너뛸까요? 남은 단계 보상은 즉시 지급됩니다.'))) G.skipPathTut();
@@ -583,12 +682,17 @@ function helpCards() {
 }
 function settings() {
   const s = S();
-  modal({ title: '설정', after0: 1, html: '<div class="row">화면 <button class="sm" id="narrowOn" onclick="localStorage.removeItem(\'murim_narrow_ack\');UI.applyScreen()">좁은 화면 경고 다시 켜기</button></div>' + '<div class="row">속도 <button class="sm ' + (s.speed === 1 ? 'pri' : '') + '" data-sp="1">1×</button><button class="sm ' + (s.speed === 2 ? 'pri' : '') + '" data-sp="2">2×</button></div>',
+  const op = s.opt || (s.opt = G.optDefault()); const tg = (k, on, t) => '<button class="sm ' + (on ? 'pri' : '') + '" data-op="' + k + '">' + t + '</button>';
+  const optRows = '<div class="row">화면 흔들림 ' + tg('shake', op.shake, op.shake ? '켬' : '끔') + '</div><div class="row">연출 수준 ' + ['높음', '보통', '낮음'].map(v => '<button class="sm ' + (op.fx === v ? 'pri' : '') + '" data-fx="' + v + '">' + v + '</button>').join('') + '</div>' +
+    '<div class="row">번쩍임 줄이기 ' + tg('flash', op.flash, op.flash ? '켬' : '끔') + '</div><div class="row">진동 ' + tg('vib', op.vib, op.vib ? '켬' : '끔') + '</div>';
+  modal({ title: '설정', after0: 1, html: optRows + '<div class="row">화면 <button class="sm" id="narrowOn" onclick="localStorage.removeItem(\'murim_narrow_ack\');UI.applyScreen()">좁은 화면 경고 다시 켜기</button></div>' + '<div class="row">속도 <button class="sm ' + (s.speed === 1 ? 'pri' : '') + '" data-sp="1">1×</button><button class="sm ' + (s.speed === 2 ? 'pri' : '') + '" data-sp="2">2×</button></div>',
     buttons: [{ t: '튜토리얼 다시 보기 · 개인 성장', fn: () => { UI.replay = { list: D.TUT, i: 0 }; UI.tab = 'map'; render(); } },
       { t: '튜토리얼 다시 보기 · 내 진로', disabled: !s.route, fn: () => { UI.replay = { list: D.RTUT, i: 0 }; UI.tab = 'map'; render(); } },
       { t: '새 게임(저장 삭제)', cls: 'red', fn: async () => { if (await confirmP('정말 저장을 지우고 처음부터?')) { localStorage.removeItem(G.SAVE_KEY); location.reload(); } } },
       { t: '닫기' }],
-    after: m => m.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => { s.speed = +b.dataset.sp; G.save(); m.querySelectorAll('[data-sp]').forEach(x => x.classList.toggle('pri', x === b)); }) });
+    after: m => { m.querySelectorAll('[data-op]').forEach(b => b.onclick = () => { const k = b.dataset.op; op[k] = !op[k]; b.classList.toggle('pri', op[k]); b.textContent = op[k] ? '켬' : '끔'; G.save(); });
+      m.querySelectorAll('[data-fx]').forEach(b => b.onclick = () => { op.fx = b.dataset.fx; m.querySelectorAll('[data-fx]').forEach(x => x.classList.toggle('pri', x === b)); G.save(); });
+      m.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => { s.speed = +b.dataset.sp; G.save(); m.querySelectorAll('[data-sp]').forEach(x => x.classList.toggle('pri', x === b)); }); } });
 }
 // ---------- 디버그 (?debug=1) ----------
 let dbgOpen = false;
