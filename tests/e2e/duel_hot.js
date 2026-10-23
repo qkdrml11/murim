@@ -39,11 +39,14 @@ const [W, H] = (process.argv[2] || '390x844').split('x').map(Number), PORT = pro
   const s1 = await p.evaluate(() => FX.stat); ok(s1.trail > 0, 'M1 높음 → 잔상 그리기 (' + JSON.stringify(s1) + ')');
   // M1: 보통/낮음 파티클 수·번쩍임 줄이기
   const cmp = await p.evaluate(() => { const ar = document.createElement('div'); ar.style.cssText = 'position:fixed;width:300px;height:200px'; const cv = document.createElement('canvas'); ar.appendChild(cv); document.body.appendChild(ar); FX.attach(ar, cv); const r = {};
-    for (const lv of ['높음', '보통', '낮음']) { FX.opt = { shake: false, fx: lv, flash: lv === '낮음', vib: false }; FX.parts = []; FX.flashT = []; FX.stat = { parts: 0, flash: 0, soft: 0, trail: 0 }; FX.play('manual', { text: 'x', side: 'e' }); FX.frame(0.016); r[lv] = Object.assign({ cls: ar.className }, FX.stat); }
+    for (const lv of ['높음', '보통', '낮음']) { FX.opt = { shake: true, fx: lv, flash: lv === '낮음', vib: false }; FX.parts = []; FX.flashT = []; FX.stat = { parts: 0, flash: 0, soft: 0, trail: 0 }; FX.play('manual', { text: 'x', side: 'e' }); FX.frame(0.016); r[lv] = Object.assign({ cls: ar.className }, FX.stat); }
     FX.clear(); ar.remove(); return r; });
   ok(cmp['높음'].parts > cmp['보통'].parts && cmp['보통'].parts > cmp['낮음'].parts && cmp['낮음'].parts > 0, 'M1 파티클 높음>보통>낮음 ' + [cmp['높음'].parts, cmp['보통'].parts, cmp['낮음'].parts]);
   ok(cmp['높음'].trail === 1 && cmp['보통'].trail === 0, 'M1 잔상은 높음만');
   ok(cmp['낮음'].soft === 1 && /flashs/.test(cmp['낮음'].cls) && /\bflash\b/.test(cmp['보통'].cls), '번쩍임 줄이기 → 약한 번쩍임(알파 0.2)');
+  ok(cmp['낮음'].shake > 0 && cmp['보통'].shake > 0, '흔들림: 낮음에서도 켜짐');
+  const sh0 = await p.evaluate(() => { const ar = document.createElement('div'); document.body.appendChild(ar); FX.attach(ar, null); FX.opt = { shake: false, fx: '높음', flash: false, vib: false }; FX.stat = {}; FX.play('manual', { side: 'e' }); FX.clear(); ar.remove(); return FX.stat.shake || 0; });
+  ok(sh0 === 0, '흔들림 끔 설정 → 흔들림 0');
   // 초절정: 4칸
   await p.evaluate(() => { const S = G.S; S.realm = 5; G.mgMigrate(S); }); ok(await p.evaluate(() => G.S.hot.length === 4), '초절정 4칸');
   console.log(W + 'x' + H, '콘솔 오류', errs.length, errs.slice(0, 3)); ok(errs.length === 0, '콘솔 오류 0');

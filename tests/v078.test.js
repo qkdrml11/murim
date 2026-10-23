@@ -44,6 +44,11 @@ u = up(4, 2, 0); ok(u.mgMain === 'swg' && u.mg.swg.s === 7, '#44 절정 상승 �
 u = up(3, 2, 0); ok(u.mgMain === 'swg' && u.mg.swg.s === 5, '#44 일류 상승 → 단월 5성');
 u = up(3, 2, 1); ok(u.mg.swg.s === 6, '#44 상승 + gsk1 → 6성');
 u = up(2, 1, 2); ok(u.mg.sjg.s === 5, '#44 gsk 더해도 경지 상한(이류 5) 안');
-u = up(1, 1, 0); ok(u.mg.sjg.s === 3, '#44 삼류 중승 → 상한 3성으로 자름');
+u = up(1, 1, 0); ok(u.mg.sjg.s === 5, '#44 삼류 중승 → 5성(상한 3 넘어도 유지)');
+u = up(1, 1, 2); ok(u.mg.sjg.s === 5, '#44 삼류 중승 + gsk2 → 5성(gsk 부분만 잘림)');
+u = up(1, 2, 1); ok(u.mgMain === 'swg' && u.mg.swg.s === 5, '#44 삼류 상승 + gsk1 → 단월 5성');
+u = up(1, 0, 3); ok(u.mg.sjg.s === 3, '#44 삼류 하승 + gsk3 → 상한 3성으로 잘림');
+u = up(2, 0, 1); ok(u.mg.sjg.s === 4, '#44 이류 하승 + gsk1 → 3+1=4성');
+u = up(5, 2, 2); ok(u.mg.swg.s === 10, '#44 초절정 상승 + gsk2 → max(5,9)+2=11 → 상한 10');
 S = fresh(); G.learnSkill('wtj', '비무'); ok(G.queue.some(e => e.title && e.title.indexOf('복호장') >= 0 && /무공 탭/.test(e.text)), 'M6 복호장 습득 문구에 무공 탭 안내');
 console.log(fail ? 'FAIL ' + fail : 'ALL PASS'); process.exit(fail ? 1 : 0);
