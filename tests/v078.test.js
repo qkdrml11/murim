@@ -34,4 +34,16 @@ localStorage.removeItem(G.SAVE_KEY || 'murim_save_v6'); localStorage.setItem('mu
 const L = G.load(); ok(L && G.S.v === 6 && G.S.mg && G.S.hot && G.S.hot.length === 3, 'v5 저장 → v6 변환 (' + JSON.stringify(G.S && G.S.hot) + ')');
 // 9. 잠긴 절초 예약 불가
 S = fresh(); const d = new DuelLib.Duel(Object.assign(G.me(), {}), [1, 60, 9, 0, 0, 0, '', '적'], { hot: [0] }, Math.random, 1); if (d.pool[0]) { d.pool[0].lock = 1; d.hist.push(1); ok(!d.canReserve(0), '잠긴 초식 예약 거부'); }
+// #44 v5 grade → 무공·성 (13-9-1)
+const up = (realm, grade, gsk) => { G.newGame('t', true); const o = JSON.parse(JSON.stringify(G.S)); o.v = 5; delete o.mg; delete o.hot; delete o.mgMain; o.realm = realm; o.grade = grade; o.gsk = gsk; G.mgUpgrade5(o); return o; };
+let u = up(4, 0, 0); ok(u.mgMain === 'sjg' && u.mg.sjg.s === 7, '#44 절정 하승 → 유성 7성(경지표가 더 높음)');
+u = up(1, 0, 0); ok(u.mgMain === 'sjg' && u.mg.sjg.s === 1, '#44 삼류 하승 → 유성 1성');
+u = up(3, 1, 0); ok(u.mgMain === 'sjg' && u.mg.sjg.s === 5, '#44 일류 중승 → 유성 5성');
+u = up(2, 1, 0); ok(u.mg.sjg.s === 5, '#44 이류 중승 → 유성 5성(상한 5)');
+u = up(4, 2, 0); ok(u.mgMain === 'swg' && u.mg.swg.s === 7, '#44 절정 상승 → 단월 주 외공 max(5,7)=7성');
+u = up(3, 2, 0); ok(u.mgMain === 'swg' && u.mg.swg.s === 5, '#44 일류 상승 → 단월 5성');
+u = up(3, 2, 1); ok(u.mg.swg.s === 6, '#44 상승 + gsk1 → 6성');
+u = up(2, 1, 2); ok(u.mg.sjg.s === 5, '#44 gsk 더해도 경지 상한(이류 5) 안');
+u = up(1, 1, 0); ok(u.mg.sjg.s === 3, '#44 삼류 중승 → 상한 3성으로 자름');
+S = fresh(); G.learnSkill('wtj', '비무'); ok(G.queue.some(e => e.title && e.title.indexOf('복호장') >= 0 && /무공 탭/.test(e.text)), 'M6 복호장 습득 문구에 무공 탭 안내');
 console.log(fail ? 'FAIL ' + fail : 'ALL PASS'); process.exit(fail ? 1 : 0);
